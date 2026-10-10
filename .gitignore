@@ -1,0 +1,14 @@
+# відео і проміжні дані
+*.mp4
+*.mov
+*.jsonl
+*.npz
+*.npy
+*.log
+dataset/
+runs/
+out*/
+__pycache__/
+.venv/
+# стандартні ваги YOLO завантажуються автоматично
+yolo11*.pt

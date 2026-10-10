@@ -1,0 +1,37 @@
+{
+  "sampled_frames": 1200,
+  "ball_found_share": 0.296,
+  "ball_in_crop_share": 0.983,
+  "players_in_crop_share": 0.702,
+  "static_balls_filtered": 4966,
+  "cam_speed_mean_px_s": 48.4,
+  "cam_speed_max_px_s": 390.6,
+  "crop_w_min": 895,
+  "crop_w_max": 1416,
+  "cfg": {
+    "out_w": 1920,
+    "out_h": 1080,
+    "depth_y": [
+      150,
+      700
+    ],
+    "min_crop_w": [
+      800,
+      1700
+    ],
+    "max_crop_w": [
+      1600,
+      2800
+    ],
+    "spread_k": 1.4,
+    "focus_px": 300,
+    "static_ball_px": 25,
+    "static_ball_share": 0.15,
+    "ball_gate_px": 350,
+    "ball_weight": 0.7,
+    "window_ball_conf": 0.4,
+    "smooth_sigma_s": 0.8,
+    "max_speed_px_s": 900,
+    "dead_zone_px": 60
+  }
+}

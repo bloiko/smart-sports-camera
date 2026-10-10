@@ -5,8 +5,15 @@ src, out, step = sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv)>3 e
 start = int(sys.argv[4]) if len(sys.argv)>4 else 0   # продовжити з кадру (дописує у файл)
 m = YOLO('yolo11s.pt')
 cap = cv2.VideoCapture(src); W=int(cap.get(3)); n=int(cap.get(7))
-Y0, Y1 = 60, 800                      # смуга поля (обрізаємо небо і трибуну)
-tiles = [(0,1400),(1348,2748),(2696,W)]
+# смуга і плитки — з маски поля (працює для будь-якого стадіону і роздільності)
+from fieldmask import field_mask
+import numpy as np
+_fm = field_mask(src)[0]; _ys, _xs = np.where(_fm > 0)
+Y0, Y1 = max(0, int(_ys.min()) - 60), min(int(cap.get(4)), int(_ys.max()) + 20)
+X0, X1 = int(_xs.min()), int(_xs.max()) + 1
+tw = (X1 - X0 + 100) // 3
+tiles = [(X0 + k * (tw - 50), min(X1, X0 + k * (tw - 50) + tw)) for k in range(3)]
+print('band', Y0, Y1, 'tiles', tiles, flush=True)
 f = open(out,'a' if start else 'w'); t0=time.time(); i=start
 if start: cap.set(cv2.CAP_PROP_POS_FRAMES, start)
 while True:

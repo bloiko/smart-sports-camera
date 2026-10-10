@@ -57,6 +57,12 @@ def field_players(persons):
         pts.append((fx, fy))
     return np.array(pts) if pts else np.zeros((0, 2))
 
+# глибина поля з даних: y дальніх і ближніх гравців (замість ручного depth_y)
+_feet_y = [feet(b)[1] for r in rows for b in r['persons'] if b[4] >= 0.25 and FMASK[min(int(feet(b)[1]), H-1), min(int(feet(b)[0]), W-1)]]
+if len(_feet_y) > 50:
+    CFG['depth_y'] = [float(np.percentile(_feet_y, 2)), float(np.percentile(_feet_y, 98))]
+print('depth_y', [round(v) for v in CFG['depth_y']], flush=True)
+
 # ---------- 2. м'яч: фільтр нерухомих (запасні м'ячі) + зв'язування в трек ----------
 all_balls = [(i, center(b), b[4]) for i, r in enumerate(rows) for b in r['balls']]
 static = []
@@ -144,6 +150,21 @@ CW = gauss(CW, sig * 3)
 CH = CW * CFG['out_h'] / CFG['out_w']
 CH = np.minimum(CH, H); CW = CH * CFG['out_w'] / CFG['out_h']
 X = np.clip(X, CW/2, W - CW/2); Y = np.clip(Y - CH*0.08, CH/2, H - CH/2)  # гравці трохи вище центру кадру
+
+# не захоплювати чорні поля панорами (склейка камер дає вигнуті межі зображення)
+_med = field_mask(SRC)[1]
+_content = (_med.max(axis=2) > 12)
+_top = np.array([np.argmax(c) if c.any() else 0 for c in _content.T])               # перший непорожній рядок у кожному стовпці
+_bot = np.array([H - np.argmax(c[::-1]) if c.any() else H for c in _content.T])
+for f in range(len(X)):
+    a, b = int(X[f] - CW[f]/2), int(X[f] + CW[f]/2)
+    t, bt = _top[a:b].max(), _bot[a:b].min()
+    y0 = max(Y[f] - CH[f]/2, t)
+    if y0 + CH[f] > bt: y0 = max(t, bt - CH[f])
+    if bt - t < CH[f]:                     # місця не вистачає — зменшуємо кадр (сильніший зум)
+        CH[f] = bt - t; CW[f] = CH[f] * CFG['out_w'] / CFG['out_h']; y0 = t
+        X[f] = np.clip(X[f], CW[f]/2, W - CW[f]/2)
+    Y[f] = y0 + CH[f]/2
 
 # ---------- 5. метрики ----------
 inside = tot = 0; pin = []

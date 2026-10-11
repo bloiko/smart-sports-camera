@@ -14,6 +14,8 @@ MARGIN = 0.15     # вікно трохи ширше за кадр камери,
 
 import os
 MODEL = os.environ.get('BALL_MODEL', 'yolo11s.pt')   # ball_v02.pt — дотренована модель
+import torch
+DEVICE = os.environ.get('DEVICE', 'mps' if torch.backends.mps.is_available() else 'cpu')   # Apple GPU, якщо є
 m = YOLO(MODEL); CLASSES = [32] if MODEL.startswith('yolo') else None
 p = np.load(PATH); X, Y, CW, CH = p['X'], p['Y'], p['CW'], p['CH']
 cap = cv2.VideoCapture(SRC); N = int(cap.get(7))
@@ -28,7 +30,7 @@ for f in range(START, min(N, len(X))):
     cw, ch = int(CW[f] * (1 + MARGIN)), int(CH[f] * (1 + MARGIN))
     x0 = int(np.clip(X[f] - cw / 2, 0, W - cw)); y0 = int(np.clip(Y[f] - ch / 2, 0, H - ch))
     up = cv2.resize(img[y0:y0 + ch, x0:x0 + cw], None, fx=UP, fy=UP, interpolation=cv2.INTER_CUBIC)
-    r = m.predict(up, imgsz=1920, conf=0.1, classes=CLASSES, verbose=False)[0]
+    r = m.predict(up, imgsz=1920, conf=0.1, classes=CLASSES, device=DEVICE, verbose=False)[0]
     balls = [[round(b[0] / UP + x0, 1), round(b[1] / UP + y0, 1), round(b[2] / UP + x0, 1), round(b[3] / UP + y0, 1), round(s, 3)]
              for b, s in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist())]
     f_out.write(json.dumps({'frame': f, 'balls': balls}) + '\n'); f_out.flush()

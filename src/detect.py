@@ -4,6 +4,8 @@ from ultralytics import YOLO
 src, out, step = sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv)>3 else 5
 start = int(sys.argv[4]) if len(sys.argv)>4 else 0   # продовжити з кадру (дописує у файл)
 m = YOLO('yolo11s.pt')
+import os, torch
+DEVICE = os.environ.get('DEVICE', 'mps' if torch.backends.mps.is_available() else 'cpu')   # Apple GPU, якщо є
 cap = cv2.VideoCapture(src); W=int(cap.get(3)); n=int(cap.get(7))
 # смуга і плитки — з маски поля (працює для будь-якого стадіону і роздільності)
 from fieldmask import field_mask
@@ -24,7 +26,7 @@ while True:
     if not ok: break
     persons, balls = [], []
     for x0,x1 in tiles:
-        r = m.predict(img[Y0:Y1,x0:x1], imgsz=1280, conf=0.12, classes=[0,32], verbose=False)[0]
+        r = m.predict(img[Y0:Y1,x0:x1], imgsz=1280, conf=0.12, classes=[0,32], device=DEVICE, verbose=False)[0]
         for b,c,s in zip(r.boxes.xyxy.tolist(), r.boxes.cls.tolist(), r.boxes.conf.tolist()):
             box=[b[0]+x0,b[1]+Y0,b[2]+x0,b[3]+Y0]
             (balls if c==32 else persons).append([round(v,1) for v in box]+[round(s,3)])

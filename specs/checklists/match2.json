@@ -1,0 +1,7 @@
+{
+  "video": "132877.mp4",
+  "note": "Goal mouths measured by hand on the frame at 0:30, panorama pixels [x0, y0, x1, y1]. Events: to be filled after reviewing the video.",
+  "goals": {"left": [763, 325], "right": [3286, 295]},
+  "mouths": {"left": [694, 279, 832, 370], "right": [3215, 249, 3358, 340]},
+  "events": []
+}

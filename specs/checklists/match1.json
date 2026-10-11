@@ -1,0 +1,9 @@
+{
+  "video": "118575.mp4",
+  "note": "Goal mouths measured by hand on frames at 1:00 (right) and 2:52 (left), panorama pixels [x0, y0, x1, y1].",
+  "goals": {"left": [776, 321], "right": [3278, 291]},
+  "mouths": {"left": [705, 278, 848, 364], "right": [3218, 248, 3338, 334]},
+  "events": [
+    {"time": "2:54.8", "goal": "left", "type": "goal", "note": "Blue attacker beats the keeper; confirmed by the owner (2:50-2:57)"}
+  ]
+}

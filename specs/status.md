@@ -2,13 +2,13 @@
 
 Living document: update it at the end of every work session (see `.claude/skills/project-docs/SKILL.md`). The stable plan for each phase is in `../docs/phases.md`.
 
-Last updated: 2026-10-11
+Last updated: 2026-10-11 (session 2)
 
 | Phase | Status |
 | --- | --- |
 | 0. Test footage | Partially done: 3 public panoramic matches; no own iPhone footage yet |
 | 1. Offline prototype | Done (v0.1), with caveats |
-| 2. Tracking quality and own model | In progress (v0.2 done, v0.3 paused) |
+| 2. Tracking quality and own model | In progress (v0.3 camera done: goal-area framing; model v0.3 next) |
 | 3. iOS app + cloud | Not started |
 | 4. Everyday use and beta | Not started |
 | 5. YouTube live | Not started |
@@ -64,7 +64,7 @@ Last updated: 2026-10-11
 
 ## Phase 2: tracking quality and own model
 
-**Status:** in progress. v0.2 done; v0.3 paused while documentation was added.
+**Status:** in progress. v0.2 done; v0.3 camera (goal-area framing, F7) done on 2026-10-11; model v0.3 not started.
 
 **Done**
 - `ball_window.py`: ball search in a 2× upscaled window around the camera view (match 1: 13% → 21% of samples with a ball).
@@ -73,10 +73,19 @@ Last updated: 2026-10-11
 - `merge_balls.py`: union of models with per-model thresholds.
 - Pipeline made stadium-independent: adaptive field mask, detection band from the mask, field depth from player positions, crop kept inside the image content.
 - `make_dataset.py` rewritten for multi-match datasets: ball size fitted from real boxes, labels snapped to the ball blob, off-field labels dropped, negatives away from any ball.
+- v0.3 camera (`follow.py`), 2026-10-11:
+  - Goal-area mode: on when the ball is near a goal or the goal area holds clearly more players than usual (attack); the crop frames the goal mouth, the ball and the players near the goal. The match 1 goal (2:54.8) is now in frame 100% of the time (v0.2: 0%).
+  - Goals found automatically with no user input and no third-party model (`src/goals.py`: tips of the area where players spend the match); error ≤ 62 px in x and ≤ 81 px in y on all 6 goals.
+  - Ball as a hard constraint (inside the crop with a margin), short track gaps filled; ball in crop 98–100% (v0.2: 82–90%).
+  - Spare-ball filter: a ball lying still for 2 s or returning to the same spot for 60 s with no player within 1.3 player heights. Removed the logo letter "f" and corner-flag balls; precision 22–24 of 24 on all matches.
+  - Smooth catch-up instead of jumps when the ball reappears far away (two-sided speed cap 2250 px/s).
+  - Border zoom: near the pitch ends the crop zooms in (up to 25%) instead of showing empty near-side grass under the curved panorama border.
+  - Players in frame fell from 64–71% to 56–62%: the price of keeping the ball and goals in frame.
+- Tools: `src/check_goals.py` (automatic goal checklist), `src/ball_sheet.py` (precision contact sheets), `follow.py --no-render / --range / --set / --goals`, MPS (Apple GPU) in `detect.py` and `ball_window.py`. Pipeline now runs on the owner's M1 Mac (detection of 4 minutes ≈ 11 min).
 
 **To do** (details and priorities in `backlog.md`)
-- Goal-area framing: a goal in match 1 (between 2:00 and 4:00) was not shown.
-- Finish v0.3: fix label snapping on pale grass (match 3), train on 3 matches, evaluate on held-out minutes of each.
+- Fill the goal checklist for matches 2 and 3 (goals and shots with timestamps).
+- Model v0.3: train on 3 matches using the cleaner v0.3 ball tracks, evaluate on held-out minutes of each.
 - Switch to an Apache-2.0 detector before any closed release.
 - Manual labels for hard cases; golden clips with ground truth; goal checklist.
 - Lead the play; widen the crop when uncertain.
@@ -88,12 +97,19 @@ Last updated: 2026-10-11
 - Interpolated pseudo-labels drift up to ~20 px when the ball curves; some "balls" were people behind a fence.
 - Training at 640 px, batch 16 ran out of the 8 GB RAM: switched to 320 px patches with no dataloader workers.
 - Every command has a 10-minute limit: training and detection run in resumable chunks.
+- With the current detection band the v0.2 tracker accepted logo letters and spare balls at the corner flag as the ball (about 40% of its "found" balls in match 1), so earlier match 1 numbers were optimistic.
+- Finding goals by the keeper (extreme player) failed by up to ~800 px: ball boys and substitutes stand by the corner flags all match. White goal posts on the median frame were also unreliable: fences and practice goals look the same, and far-side lines in match 3 are dark.
+- In goal-area mode a wide crop in these stitched panoramas becomes tall, and the curved black top border pushes it down, so the goal ended up small in a corner. Fixed by framing only the action near the goal (crop ≈ 980 px instead of 1760).
+- Switching the goal constraint on and off made the camera jump (up to 14,000 px/s); fixed with hysteresis, minimum episode length and constraints applied only before smoothing.
 
 **Lessons learned**
 - Always test on a match the model has never seen; one-match results are misleading.
 - Different models fail in different places: merging them helps more than tuning one.
 - Check pseudo-labels on a contact sheet for every match before training.
 - Metrics hide missed goals: the owner spotted it by watching. A goal checklist is needed.
+- Look at crops, not only metrics: "ball found" rose in v0.2 because of a logo letter; "goal in frame" passed while the goal was a tiny corner of the frame.
+- Behaviour of players is a more universal signal than appearance: the play-area tips found all 6 goals; appearance-based ideas failed on at least one stadium.
+- Compare camera versions on identical `detections.jsonl` and `balls.jsonl`, otherwise detection changes hide the camera changes.
 
 ---
 

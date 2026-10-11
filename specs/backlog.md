@@ -22,7 +22,8 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - **Done 2026-10-11:** goals recognised by the following kickoff (both test goals, no false ones); time label and fade between clips.
 - **Problem:** the kickoff threshold rests on 2 goals with a small margin (0.80 vs 0.74); non-goal clips are still ~1 minute per 4 minutes, ~25 minutes for a 90-minute match; a goal in the last ~30 s of a video has no kickoff to confirm it.
 - **Ideas:** confirm the kickoff with a still ball at the centre spot; celebration (attacking team clustered, slow); ball speed towards the goal (shot); a "top N" mode for long matches.
-- **From the review of the first reels:** tighter zoom on the goal action inside highlight clips (the main video stays wide); the "players only" trigger alone gives most weak clips, yet the match 3 chance at 1:25 had no ball detected, so it cannot simply be dropped.
+- **Done 2026-10-11:** closer camera and vertical 9:16 for highlight clips (`closeup.py`).
+- **Open:** sharpness of the closer camera (source crop 300–480 px is upscaled 2–3.6×; phone 4K footage of a small pitch should be better); vertical clips spend the top third on the background; the "players only" trigger alone gives most weak clips, yet the match 3 chance at 1:25 had no ball detected, so it cannot simply be dropped.
 - **Done when:** every goal in the checklists is labelled as a goal and ranked above all non-goal clips; a "top N" reel of a 90-minute match is ≤ 3 minutes.
 
 ### 3. Goal-area framing: remaining issues
@@ -46,5 +47,4 @@ Last updated: 2026-10-11 (session 2, docs synced)
 7. **Pitch registration:** detect the pitch markings and map the image to pitch coordinates (metres). Would give exact goals, zoom by real distance, top-down positions for highlights and stats. Own computation only (owner's requirement: no third-party models or services).
 8. iOS app skeleton (phase 3): 4K ultra-wide recording in 2–5 minute chunks and the setup screen.
 9. Lead the play and widen the crop when tracking is uncertain.
-10. Vertical 9:16 output (F6).
 11. Translate code comments and docstrings to English.

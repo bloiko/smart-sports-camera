@@ -84,6 +84,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
   - Players in frame fell from 64–71% to 56–62%: the price of keeping the ball and goals in frame.
 - `src/pipeline.py`: the whole pipeline in one command with skip and resume (tested by interrupting detection on a 40 s clip; 2.4 min for 40 s of video).
 - `src/highlights.py` (F13): clips of goal-area episodes with a time label and fade-in; all 7 checklist events are inside a clip. Goals recognised by the kickoff that follows them (`src/kickoff.py`: teams by jersey colour, each team in its own half): both test goals labelled GOAL, no false goals; goals-only reel available.
+- Closer camera for highlights and vertical 9:16 (F6, `src/closeup.py`): ~0.65 of the main crop aimed at the ball, or at the goal when the ball is lost in goal mode; both goals look much larger than in the main video.
 - Tools: `src/check_goals.py` (automatic goal checklist), `src/ball_sheet.py` (precision contact sheets), `follow.py --no-render / --range / --set / --goals`, MPS (Apple GPU) in `detect.py` and `ball_window.py`. Pipeline now runs on the owner's M1 Mac (detection of 4 minutes ≈ 11 min).
 
 **To do** (details and priorities in `backlog.md`)

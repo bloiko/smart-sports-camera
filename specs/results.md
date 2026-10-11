@@ -64,6 +64,8 @@ The danger score does not single out goals yet: the match 3 goal scores 0.50, be
 | 2 | none | none | 0.68 | 0 |
 | 3 | 2:04.7 | 2:28.0 (23 s after the goal) | 0.80 (start of video, a kickoff with no goal before it: 0.74) | 1, correct |
 
+Closer highlight camera (2026-10-11): crop height 300–480 source px (median 347 for 16:9, 480 for 9:16). Checked on frames of both goals: goal, keeper, scorer and ball in frame in both formats. In these stitched panoramas the curved top border keeps far-side goals in the upper third of the frame; in match 1 the ball near the goal is mostly undetected, so the camera aims between the goal and the main camera.
+
 Threshold 0.77. The margin is small (0.80 vs 0.74) and rests on 2 goals: re-check on every new video. With goals marked, the reels are 52 / 56 / 103 s; goals-only reels 23 s and 25 s.
 
 ## Automatic goal finding (`src/goals.py`)

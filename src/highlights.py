@@ -11,9 +11,12 @@
 не раніше ніж за GOAL_BEFORE_KICKOFF с до кікофу, позначається як гол (небезпека = 1). Кліп голу довший:
 до кінця епізоду + 4 с (святкування теж варто показати).
 На початку кожного кліпу: вхід з чорного 0.4 с і мітка «2:04 · GOAL · right goal» на 3 с.
+З --video кліпи рендеряться з оригіналу ближчою камерою (closeup.py: ~0.65 кадру основної камери, ціль — м'яч);
+--vertical додатково робить вертикальні 9:16 (1080×1920) у OUT_DIR/vertical/ для Reels і Shorts.
 
 Використання: python src/highlights.py FINAL_DIR OUT_DIR [--video V --det DETECTIONS.jsonl] [--checklist C.json]
-                                       [--top N] [--min-score S] [--goals-only]
+                                       [--top N] [--min-score S] [--goals-only] [--vertical] [--wide]
+  --wide: кліпи з основного (широкого) відео, як раніше.
   FINAL_DIR — тека follow.py (camera_path.npz, out_follow.mp4).
   → OUT_DIR/clip_01_2m50s.mp4 ..., OUT_DIR/highlights.mp4 (усі кліпи підряд), OUT_DIR/highlights.json
 """
@@ -113,12 +116,25 @@ def main():
     if '--goals-only' in sys.argv: ms = [m for m in ms if m['kind'] == 'goal']
     if arg('--top'): ms = sorted(sorted(ms, key=lambda m: -m['score'])[:int(arg('--top'))], key=lambda m: m['start'])
     video = os.path.join(final, 'out_follow.mp4'); files = []
+    close = arg('--video') and '--wide' not in sys.argv
+    if close or '--vertical' in sys.argv:
+        from closeup import close_path, content_bounds, render
+        from fieldmask import field_mask
+        med = field_mask(arg('--video'))[1]; Hs, Ws = med.shape[:2]; top, bot = content_bounds(med)
+        paths = {False: close_path(p, Ws, Hs, top, bot)}
+        if '--vertical' in sys.argv:
+            paths[True] = close_path(p, Ws, Hs, top, bot, vertical=True); os.makedirs(os.path.join(out, 'vertical'), exist_ok=True)
+            for f in os.listdir(os.path.join(out, 'vertical')):
+                if f.endswith('.mp4'): os.remove(os.path.join(out, 'vertical', f))
     for k, m in enumerate(ms, 1):
         name = f"clip_{k:02d}_{int(m['peak'] // 60)}m{int(m['peak'] % 60):02d}s.mp4"; m['file'] = name
         if os.path.exists(video):
             t = m['peak']; side = f"{m['goal']} goal"
             label = f"{int(t // 60)}:{int(t % 60):02d}  " + (f"GOAL  {side}" if m['kind'] == 'goal' else f"chance  {side}")
-            render_clip(video, m['start'], m['end'], label, os.path.join(out, name))
+            if close: render(arg('--video'), paths[False], os.path.join(out, name), m['start'], m['end'], (1920, 1080), label)
+            else: render_clip(video, m['start'], m['end'], label, os.path.join(out, name))
+            if '--vertical' in sys.argv:
+                render(arg('--video'), paths[True], os.path.join(out, 'vertical', name), m['start'], m['end'], (1080, 1920), label)
             files.append(name)
     if files:
         with open(os.path.join(out, 'list.txt'), 'w') as f:

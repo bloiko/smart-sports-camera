@@ -134,7 +134,7 @@ def main():
     # 8. хайлайти
     if '--highlights' in sys.argv and os.path.exists(os.path.join(final, 'out_follow.mp4')):
         print('[highlights]', flush=True)
-        run([PY, S('highlights.py'), final, P('highlights'), '--video', video, '--det', det] + (['--checklist', os.path.abspath(checklist)] if checklist else []))
+        run([PY, S('highlights.py'), final, P('highlights'), '--video', video, '--det', det, '--vertical'] + (['--checklist', os.path.abspath(checklist)] if checklist else []))
 
     print(f'pipeline done in {(time.time() - t_all) / 60:.1f} min → {final}')
 

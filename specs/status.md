@@ -85,7 +85,7 @@ Last updated: 2026-10-11 (session 2)
 - Tools: `src/check_goals.py` (automatic goal checklist), `src/ball_sheet.py` (precision contact sheets), `follow.py --no-render / --range / --set / --goals`, MPS (Apple GPU) in `detect.py` and `ball_window.py`. Pipeline now runs on the owner's M1 Mac (detection of 4 minutes ≈ 11 min).
 
 **To do** (details and priorities in `backlog.md`)
-- Fill the goal checklist for matches 2 and 3 (match 2: chance at 3:38 added from the owner).
+- Fill the goal checklist for matches 2 and 3 (owner added: match 2 chance at 3:38, match 3 chance at 1:25; both pass in v0.3, match 3 fails in v0.2).
 - Model v0.3: train on 3 matches using the cleaner v0.3 ball tracks, evaluate on held-out minutes of each.
 - Switch to an Apache-2.0 detector before any closed release.
 - Manual labels for hard cases; golden clips with ground truth; goal checklist.

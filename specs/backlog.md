@@ -47,4 +47,4 @@ Last updated: 2026-10-11 (session 2, docs synced)
 7. **Pitch registration:** detect the pitch markings and map the image to pitch coordinates (metres). Would give exact goals, zoom by real distance, top-down positions for highlights and stats. Own computation only (owner's requirement: no third-party models or services).
 8. iOS app skeleton (phase 3): 4K ultra-wide recording in 2–5 minute chunks and the setup screen.
 9. Lead the play and widen the crop when tracking is uncertain.
-11. Translate code comments and docstrings to English.
+10. Translate code comments and docstrings to English.

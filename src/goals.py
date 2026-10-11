@@ -53,3 +53,40 @@ if __name__ == '__main__':
         if cl:
             for x0, y0, x1, y1 in cl['mouths'].values(): cv2.rectangle(vis, (x0, y0), (x1, y1), (255, 255, 255), 2)
         cv2.imwrite(sys.argv[sys.argv.index('--vis') + 1], vis)
+
+
+class LiveGoals:
+    """Ворота під час трансляції: лише за вже побаченими гравцями, оцінка лише розширюється назовні.
+
+    Теплова карта в секундах присутності (не відносно максимуму, як find_goals): область, де гравці провели
+    ≥ thr_s секунд, лише росте, тож оцінка не «стрибає» назад. Великий стрибок назовні (> confirm_px)
+    приймається, лише якщо повторився в двох оновленнях поспіль (викиди: люди біля кутового).
+    Перевірка на 3 матчах (2026-10-11): див. specs/results.md, розділ live.
+    """
+
+    def __init__(self, fmask, sample_dt, thr_s=3.0, sigma=25, confirm_px=150):
+        self.fm, self.dt, self.thr, self.sig, self.cp = fmask, sample_dt, thr_s, sigma, confirm_px
+        self.raw = np.zeros(fmask.shape, np.float32); self.best = None; self.pending = [None, None]
+
+    def add(self, persons):
+        H, W = self.fm.shape
+        for b in persons:
+            fx, fy = (b[0] + b[2]) / 2, b[3]
+            if b[4] >= 0.25 and 12 <= b[3] - b[1] <= 260:
+                x, y = min(int(fx), W - 1), min(int(fy), H - 1)
+                if self.fm[y, x]: self.raw[y, x] += self.dt
+
+    def update(self):
+        heat = cv2.GaussianBlur(self.raw, (0, 0), self.sig) * (2 * np.pi * self.sig ** 2)
+        n, lab, st, _ = cv2.connectedComponentsWithStats((heat > self.thr).astype(np.uint8))
+        if n < 2: return self.best
+        ys, xs = np.nonzero(lab == 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])))
+        l, r = xs <= xs.min() + 40, xs >= xs.max() - 40
+        t = np.array([[xs[l].mean(), ys[l].mean()], [xs[r].mean(), ys[r].mean()]])
+        if self.best is None: self.best = t; return self.best
+        for k, outward in ((0, t[0, 0] < self.best[0, 0]), (1, t[1, 0] > self.best[1, 0])):
+            if not outward: self.pending[k] = None; continue
+            if abs(t[k, 0] - self.best[k, 0]) <= self.cp: self.best[k] = t[k]; self.pending[k] = None
+            elif self.pending[k] is not None and abs(t[k, 0] - self.pending[k][0]) <= self.cp: self.best[k] = t[k]; self.pending[k] = None
+            else: self.pending[k] = t[k]
+        return self.best

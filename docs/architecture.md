@@ -17,6 +17,8 @@ Two modes share one tracking core. Recorded mode is built first; live mode comes
 3. The hardware encoder compresses H.264; the stream goes to YouTube over RTMPS.
 4. YouTube stores the broadcast archive, so nothing stays on the phone.
 
+Live camera logic is in `src/live_sim.py` (simulated on recorded videos): detection every 2nd–4th frame, a 2 s look-ahead buffer (YouTube adds its own delay anyway, so viewers do not notice), goals from already-seen players (`LiveGoals`), the same goal-area mode and hard constraints as offline but limited to the buffer.
+
 On-device budget: one or two 640 px passes per frame (the whole frame downscaled plus one tile around the predicted ball). Tiling the full 4K frame in real time is not feasible.
 
 ## Processing pipeline (current prototype)

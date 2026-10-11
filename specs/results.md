@@ -68,6 +68,35 @@ Closer highlight camera (2026-10-11): crop height 300–480 source px (median 34
 
 Threshold 0.77. The margin is small (0.80 vs 0.74) and rests on 2 goals: re-check on every new video. With goals marked, the reels are 52 / 56 / 103 s; goals-only reels 23 s and 25 s.
 
+## Live simulator (`src/live_sim.py`, 2026-10-11)
+
+Real-time camera with a phone-like budget: players = 2 tiles at 1280 px every 4th frame; ball = 1 tile of 320 px (upscaled 2×) every 2nd frame around the predicted ball, 2 tiles while it is lost, `ball_v02.pt` only; goals from already-seen players only (`LiveGoals`, first estimate after 30 s); the camera for frame f sees data up to f + buffer. Compared with offline v0.3 on the same videos. `ball in crop` = share of the offline ball track inside the live crop; `jerk` = 95th percentile of horizontal acceleration (px/s²); checklist = events passing `check_goals.py`.
+
+| Match | Version | Ball in crop | Players | Pan > 900 px/s | Jerk p95 | Checklist |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | offline v0.3 | 99.7% | 62% | 0.2% | 233 | 1/1 |
+| 1 | live, buffer 0 s | 94% | 62% | 1.2% | 1381 | 0/1 |
+| 1 | live, buffer 1 s | 95% | 62% | 1.0% | 454 | 1/1 |
+| 1 | live, buffer 2 s | 96% | 61% | 1.2% | 284 | 1/1 |
+| 1 | live, buffer 5 s | 96% | 62% | 1.3% | 282 | 1/1 |
+| 2 | offline v0.3 | 98% | 56% | 0.7% | 266 | 4/4 |
+| 2 | live, buffer 0 s | 94% | 57% | 1.7% | 1276 | 3/4 |
+| 2 | live, buffer 1 s | 94% | 57% | 1.8% | 565 | 3/4 |
+| 2 | live, buffer 2 s | 94% | 57% | 1.5% | 351 | 4/4 |
+| 2 | live, buffer 5 s | 94% | 57% | 1.6% | 347 | 4/4 |
+| 3 | offline v0.3 | 100% | 63% | 0.2% | 252 | 2/2 |
+| 3 | live, buffer 0 s | 72% | 64% | 2.7% | 4153 | 2/2 |
+| 3 | live, buffer 1 s | 74% | 64% | 2.2% | 1375 | 2/2 |
+| 3 | live, buffer 2 s | 74% | 63% | 2.6% | 337 | 2/2 |
+| 3 | live, buffer 5 s | 74% | 63% | 2.6% | 310 | 2/2 |
+
+Conclusions:
+- **Buffer 2 s is the minimum and enough**: all 7 events pass; 0 s fails 2 events and jerks 4–12× more; 1 s fails one event; 3–5 s add nothing measurable (the camera can only use the future up to its smoothing window and the 2 s goal-mode anticipation; anticipating 5 s showed empty goals while play was still in midfield). A 5 s buffer is safe but gives no extra quality with this algorithm.
+- Live loses most where the ball is hard to see: match 3 (evening, pale grass) 74% ball in crop vs 100% offline. The live ball search finds the ball on 10% of passes in match 3, 28% in match 1, 47% in match 2; 44% of offline balls in match 3 were inside a live search tile.
+- Goals in live: wrong for the first ~60–100 s of a broadcast (one side off by up to 900 px: people near the corner flags), then within 30–130 px. The goal margin (`goal_unc` 80 px; 120 and 150 tested) made no difference.
+- What fixed live failures (each verified on the checklist): two player tiles instead of one (one 1280 px pass on a 4096 px panorama lost 40% of far players), ball candidates only on the pitch, blacklisting a "ball" that stays still 3 s with no player near (a person behind the fence in match 2), confirming a ball by a second nearby detection, widening the crop up to 1.35× when the ball is lost (match 3: 63% → 83% ball in crop before later changes), vertical constraints for the goal, border zoom.
+- Time on this Mac per call (not a phone measurement): player pass 134–193 ms for 2 tiles, ball tile 19–24 ms. The phone budget (≈ 33 ms per frame at 30 fps) is not verified; a 4K phone frame of a small pitch has larger players than these 4096 px panoramas, so one tile may be enough there.
+
 ## Processing speed (2026-10-11, MacBook Air M1 8 GB, MPS)
 
 Match 1, 4:00 of 4096×1080 video, whole pipeline from scratch (`pipeline.py`).

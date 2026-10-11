@@ -31,6 +31,11 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - **Ideas:** re-tune `goal_attack_n` and `goal_zone` once more goals are listed; check on the owner's phone footage (no curved borders); refine automatic goals with post detection near the estimate when confident.
 - **Done when:** every listed goal and shot passes, and the owner watches the goal moments without irritation.
 
+### 3b. Live: next steps
+- Measure YOLO11n/s Core ML on the iPhone 15 (1 vs 2 tiles at 1280, ball tile at 640) — decides the real detection budget.
+- Live ball search for evening / pale grass (match 3 ball in crop 74%): ball candidates from player motion, a second ball model pass when lost.
+- Goals in the first 1–2 minutes: no goal mode until the estimate is stable, or a wider margin early.
+
 ## P1: next
 
 4. **Own iPhone footage** (phase 0): 10–15 minutes, ultra-wide 0.5×, 4K 30 fps, tripod 2–3 m. Run the whole pipeline on it.

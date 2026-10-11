@@ -11,7 +11,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
 | 2. Tracking quality and own model | In progress (v0.3 camera done: goal-area framing; model v0.3 next) |
 | 3. iOS app + cloud | Not started |
 | 4. Everyday use and beta | Not started |
-| 5. YouTube live | Not started |
+| 5. YouTube live | Started early: live simulator on the Mac (buffer 2 s passes all 7 checklist events) |
 | 6. Android, full pitch, highlights | Not started |
 
 ---
@@ -115,6 +115,27 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - Look at crops, not only metrics: "ball found" rose in v0.2 because of a logo letter; "goal in frame" passed while the goal was a tiny corner of the frame.
 - Behaviour of players is a more universal signal than appearance: the play-area tips found all 6 goals; appearance-based ideas failed on at least one stadium.
 - Compare camera versions on identical `detections.jsonl` and `balls.jsonl`, otherwise detection changes hide the camera changes.
+
+---
+
+## Phase 5: YouTube live (started early, 2026-10-11)
+
+**Status:** algorithm work on the Mac; no phone code yet. The owner wants live as the main product line: wide recording stays on the phone, the cropped view goes to YouTube in real time.
+
+**Done**
+- `src/live_sim.py`: real-time camera with a phone-like detection budget and a delay buffer; `LiveGoals` in `src/goals.py` (goals from already-seen players).
+- Buffer study on 3 matches: 2 s is the minimum that passes all 7 checklist events and keeps the camera smooth; 3–5 s add nothing measurable. Results in `results.md`.
+
+**To do**
+- Measure the detection budget on a real iPhone (Core ML); it may change the number of tiles.
+- Better live ball search in the evening / pale-grass case (match 3: 74% ball in crop vs 100% offline).
+- Goals during the first 1–2 minutes of a broadcast are unreliable.
+
+**Difficulties**
+- Moving the offline camera to live broke 3 of 7 events at first; each fix was checked against the checklist (see `results.md`).
+
+**Lessons learned**
+- A YouTube delay of a few seconds is free look-ahead: 2 s of it removes most of the live penalty.
 
 ---
 

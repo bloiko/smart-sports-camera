@@ -21,6 +21,7 @@
   → OUT_DIR/clip_01_2m50s.mp4 ..., OUT_DIR/highlights.mp4 (усі кліпи підряд), OUT_DIR/highlights.json
 """
 import json, os, subprocess, sys, numpy as np, cv2
+from venc import video_args
 
 BEFORE, AFTER, MAX_LEN, MIN_EP = 8.0, 4.0, 20.0, 2.5      # секунди
 MIN_SCORE = 0.3   # нижче — на перегляді 2026-10-11 жодного небезпечного моменту (гравці в зоні без м'яча)
@@ -74,8 +75,7 @@ def render_clip(src, t0, t1, label, path):
     cap = cv2.VideoCapture(src); fps = cap.get(5); W, H = int(cap.get(3)), int(cap.get(4))
     cap.set(cv2.CAP_PROP_POS_FRAMES, int(t0 * fps))
     ff = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(fps), '-i', '-',
-                           '-ss', str(t0), '-t', str(t1 - t0), '-i', src, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-preset', 'veryfast',
-                           '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', path], stdin=subprocess.PIPE)
+                           '-ss', str(t0), '-t', str(t1 - t0), '-i', src, '-map', '0:v', '-map', '1:a?'] + video_args() + ['-c:a', 'aac', '-shortest', path], stdin=subprocess.PIPE)
     sc = H / 1080
     for k in range(int((t1 - t0) * fps)):
         ok, im = cap.read()

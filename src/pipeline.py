@@ -1,8 +1,10 @@
 """Увесь конвеєр однією командою: відео → готовий ролик, метрики, перевірки.
 
 Використання:
-  python src/pipeline.py VIDEO OUT_DIR [--step 5] [--checklist specs/checklists/match1.json]
-                         [--no-render] [--range A-B] [--from STEP] [--highlights]
+  python src/pipeline.py VIDEO OUT_DIR [--step 15] [--checklist specs/checklists/match1.json]
+                         [--no-render] [--range A-B] [--from STEP] [--highlights] [--debug]
+Швидкість (2026-10-11): крок 15 (~1.7 кадра/с при 25 fps) дає ті самі результати чекліста, голів і хайлайтів,
+що й крок 5, утричі швидше; --debug додає out_debug.mp4 (панорама з рамкою камери), він сповільнює рендер.
 
 Кроки (кожен пропускається, якщо його результат уже є; перервані детекція і пошук м'яча
 продовжуються з останнього кадру — можна просто запустити команду ще раз):
@@ -31,6 +33,9 @@ def arg(name, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
+TIMES = {}
+
+
 def run(cmd, env=None, log=None):
     print('$', ' '.join(os.path.relpath(c, ROOT) if os.path.isabs(c) else c for c in cmd), flush=True)
     t0 = time.time()
@@ -38,6 +43,8 @@ def run(cmd, env=None, log=None):
     r = subprocess.run(cmd, cwd=ROOT, env={**os.environ, **(env or {})}, stdout=out, stderr=subprocess.STDOUT if out else None)
     if r.returncode: sys.exit(f'step failed ({r.returncode}): {" ".join(cmd)}' + (f'; see {log}' if log else ''))
     print(f'  {time.time() - t0:.0f} s', flush=True)
+    name = os.path.basename(cmd[1]).replace('.py', '')
+    TIMES[name] = TIMES.get(name, 0) + time.time() - t0
 
 
 def resume_frame(path, step):
@@ -54,7 +61,7 @@ def resume_frame(path, step):
 
 def main():
     video, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
-    step = int(arg('--step', 5)); checklist = arg('--checklist')
+    step = int(arg('--step', 15)); checklist = arg('--checklist')
     os.makedirs(out, exist_ok=True)
     n_frames = int(cv2.VideoCapture(video).get(cv2.CAP_PROP_FRAME_COUNT))   # приблизно (для логу)
     state = {'redo': STEPS.index(arg('--from')) if arg('--from') else len(STEPS)}
@@ -113,7 +120,7 @@ def main():
 
     # 6. фінальна камера і рендер
     final = P('final')
-    flags = ['--no-render'] if '--no-render' in sys.argv else []
+    flags = ['--no-render'] if '--no-render' in sys.argv else ([] if '--debug' in sys.argv else ['--no-debug'])
     if arg('--range'): flags += ['--range', arg('--range')]
     rendered = os.path.exists(os.path.join(final, 'out_follow.mp4')) or '--no-render' in sys.argv
     if not done(5, os.path.join(final, 'metrics.json')) or not rendered:
@@ -137,6 +144,7 @@ def main():
         run([PY, S('highlights.py'), final, P('highlights'), '--video', video, '--det', det, '--vertical'] + (['--checklist', os.path.abspath(checklist)] if checklist else []))
 
     print(f'pipeline done in {(time.time() - t_all) / 60:.1f} min → {final}')
+    for name, sec in TIMES.items(): print(f'  {name:12s} {sec:6.0f} s')
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@
 v0.3: режим воріт (ворота знаходить goals.py), м'яч як жорстке обмеження, кращий фільтр запасних м'ячів.
 """
 import json, sys, subprocess, math
+from venc import video_args
 import numpy as np, cv2
 
 SRC, DET = sys.argv[1], sys.argv[2]
@@ -380,8 +381,8 @@ if '--range' in sys.argv:
 
 def ff(path, w, h):
     return subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}',
-        '-r', str(FPS), '-i', '-', '-ss', str(R0 / FPS), '-i', SRC, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-preset', 'veryfast',
-        '-crf', '23', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', path], stdin=subprocess.PIPE)
+        '-r', str(FPS), '-i', '-', '-ss', str(R0 / FPS), '-i', SRC, '-map', '0:v', '-map', '1:a?'] + video_args(h) + [
+        '-c:a', 'aac', '-shortest', path], stdin=subprocess.PIPE)
 
 if '--no-render' in sys.argv: sys.exit(0)   # лише траєкторія і метрики
 do_debug = '--no-debug' not in sys.argv

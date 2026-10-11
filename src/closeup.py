@@ -11,6 +11,7 @@
 Використання (перевірка): python src/closeup.py VIDEO CAMERA_PATH.npz OUT.mp4 T0 T1 [--vertical]
 """
 import subprocess, sys, numpy as np, cv2
+from venc import video_args
 
 ZOOM, V_ZOOM, MIN_SRC_H = 0.65, 0.9, 300
 FILL_S, SMOOTH_S, MAX_SPEED_K, MARGIN = 2.0, 0.6, 1.5, 0.12
@@ -76,8 +77,7 @@ def render(video, path, out, t0, t1, size, label=None, fade=0.4):
     X, Y, CW, CH = path; ow, oh = size
     cap = cv2.VideoCapture(video); fps = cap.get(5); cap.set(cv2.CAP_PROP_POS_FRAMES, int(t0 * fps))
     ff = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{ow}x{oh}', '-r', str(fps), '-i', '-',
-                           '-ss', str(t0), '-t', str(t1 - t0), '-i', video, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-preset', 'veryfast',
-                           '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', out], stdin=subprocess.PIPE)
+                           '-ss', str(t0), '-t', str(t1 - t0), '-i', video, '-map', '0:v', '-map', '1:a?'] + video_args() + ['-c:a', 'aac', '-shortest', out], stdin=subprocess.PIPE)
     sc = min(ow, oh) / 1080
     for k in range(int((t1 - t0) * fps)):
         ok, im = cap.read()

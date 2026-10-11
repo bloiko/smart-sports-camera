@@ -25,7 +25,7 @@ brew install ffmpeg
 
 Stock YOLO weights (`yolo11s.pt`, `yolo11n.pt`) download automatically on first use. Videos and intermediate files are git-ignored; keep them outside the repo or in `work/`.
 
-On Apple Silicon, `detect.py` and `ball_window.py` use the GPU (MPS) automatically; set `DEVICE=cpu` to force the CPU. On an M1 MacBook Air, detection of a 4-minute video at step 5 takes about 11 minutes and the ball window search about 2–5 minutes per model.
+On Apple Silicon, `detect.py` and `ball_window.py` use the GPU (MPS) with half precision automatically (`DEVICE=cpu`, `HALF=0` to change), and videos are encoded with the hardware encoder (VideoToolbox; `VENC=sw` forces libx264). On an M1 MacBook Air the whole pipeline takes about 7.5 minutes per 4 minutes of video at the default step 15 (see `specs/results.md`).
 
 ## Full pipeline
 
@@ -35,7 +35,7 @@ One command runs every step, skips steps that are already done and resumes inter
 python src/pipeline.py game.mp4 work/game --checklist specs/checklists/match1.json --highlights
 ```
 
-Outputs: `work/game/final/out_follow.mp4` (the result), `out_debug.mp4`, `metrics.json`, `ball_sheet.jpg` (precision check) and `work/game/highlights/` (clips, `highlights.mp4`, `highlights.json`). `--from final` recomputes from that step (for example after changing `follow.py`); `--no-render` skips video rendering; `--step 10` samples every 10th frame.
+Outputs: `work/game/final/out_follow.mp4` (the result), `out_debug.mp4` (only with `--debug`), `metrics.json`, `ball_sheet.jpg` (precision check) and `work/game/highlights/` (clips, `highlights.mp4`, `highlights.json`). `--from final` recomputes from that step (for example after changing `follow.py`); `--no-render` skips video rendering; `--step N` samples every N-th frame (default 15: same results as 5, 3× faster); `--debug` also renders the panorama with the camera window.
 
 The individual steps, for debugging. Run from the repository root; `work/` holds all intermediate files.
 
@@ -117,7 +117,11 @@ ffmpeg -i out_follow.mp4 -t 120 -vf scale=1280:720 -c:v libx264 -preset veryfast
   -b:v 1500k -maxrate 1700k -bufsize 3000k -c:a aac -b:a 64k share_part1.mp4
 ```
 
-## Performance (cloud sandbox: 2-core CPU, no GPU)
+## Performance
+
+M1 MacBook Air, defaults: about 7.5 minutes per 4 minutes of video (detection 2.6 min, ball window 2.7 min, background check 0.6 min, camera and render 1.5 min) plus 1.3 min for highlights. Details in `specs/results.md`.
+
+### Earlier: cloud sandbox, 2-core CPU, no GPU, step 5
 
 - `detect.py`: about 0.5–1 s per sampled frame (4-minute video at step 5 ≈ 25–30 min).
 - `ball_window.py`: about 0.4–1 s per sampled frame.

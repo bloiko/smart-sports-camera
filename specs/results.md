@@ -68,6 +68,21 @@ Closer highlight camera (2026-10-11): crop height 300–480 source px (median 34
 
 Threshold 0.77. The margin is small (0.80 vs 0.74) and rests on 2 goals: re-check on every new video. With goals marked, the reels are 52 / 56 / 103 s; goals-only reels 23 s and 25 s.
 
+## Processing speed (2026-10-11, MacBook Air M1 8 GB, MPS)
+
+Match 1, 4:00 of 4096×1080 video, whole pipeline from scratch (`pipeline.py`).
+
+| Mode | Detection | Ball window (2 models) | Background check | Camera + render | Highlights (16:9 + 9:16) | Total | 90-min match (extrapolated) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Before: step 5, full precision, libx264, debug video | 613 s | 411 s | 66 s | ~300 s | — | ~23 min | ~8.5 h |
+| Fast: step 15, half precision, VideoToolbox, no debug video | 157 s | 161 s | 37 s | 91 s | 80 s | 8.9 min (7.5 without highlights) | ~2.8 h without highlights |
+
+Quality of the fast mode against step 5 on match 1: checklist PASS, goal labelled, kickoff 3:15.6 (vs 3:14.8), goals within 2 px, ball found 28.7% (26.8%), in crop 100% (99.7%), players 61% (62%), camera |dX| median 24 px; precision 23 of 24.
+
+Sparser sampling simulated on all matches by thinning the step-5/10 detections (`specs/results.md` numbers from `follow.py --no-render`): up to step 20 all 7 checklist events pass, both kickoffs are found and no false goal appears; from step 30 a false kickoff appears at the start of match 3, at step 60 a false goal. Default step chosen: 15.
+
+Other measurements: video decoding 2.7 ms per frame (not a bottleneck); player detection per sampled frame 321 ms (3 tiles at 1280), 266 ms with half precision, 187 ms at 960 px and 87 ms for the whole frame at 1920 px (fewer small players detected; not evaluated yet); batching the 3 tiles was slower (389 ms). Ball models: YOLO11s alone loses a third of the balls (match 1: 17% vs 27%), `ball_v02.pt` alone fails the match 2 attack at 1:02 — both are kept. Render of 60 s: 24 s (libx264 + debug), 14 s (VideoToolbox, no debug).
+
 ## Automatic goal finding (`src/goals.py`)
 
 Error of the automatic goal position against hand-measured goal mouths (`specs/checklists/`). A goal mouth is about 120–145 px wide in these panoramas; `follow.py` adds an 80 px margin around automatic goals.

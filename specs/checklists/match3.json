@@ -31,6 +31,12 @@
       "goal": "left",
       "type": "chance",
       "note": "Ball very close to the left goal, no goal (owner, 2026-10-11)"
+    },
+    {
+      "time": "2:04.7",
+      "goal": "right",
+      "type": "goal",
+      "note": "Yellow attacker scores past the diving keeper; yellow team celebrates at 2:12 (owner: goal at 2:05 +-10 s; time found on frames)"
     }
   ]
 }

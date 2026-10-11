@@ -29,7 +29,15 @@ On Apple Silicon, `detect.py` and `ball_window.py` use the GPU (MPS) automatical
 
 ## Full pipeline
 
-Run from the repository root. `game.mp4` is a wide static video of the whole pitch; `work/` holds all intermediate files.
+One command runs every step, skips steps that are already done and resumes interrupted ones (just run it again):
+
+```bash
+python src/pipeline.py game.mp4 work/game --checklist specs/checklists/match1.json --highlights
+```
+
+Outputs: `work/game/final/out_follow.mp4` (the result), `out_debug.mp4`, `metrics.json`, `ball_sheet.jpg` (precision check) and `work/game/highlights/` (clips, `highlights.mp4`, `highlights.json`). `--from final` recomputes from that step (for example after changing `follow.py`); `--no-render` skips video rendering; `--step 10` samples every 10th frame.
+
+The individual steps, for debugging. Run from the repository root; `work/` holds all intermediate files.
 
 ```bash
 mkdir -p work
@@ -68,6 +76,8 @@ Outputs in `work/final/`: `out_follow.mp4` (the result), `out_debug.mp4` (panora
 | `python src/detect.py VIDEO OUT.jsonl [STEP] [START]` | Detects players and balls (YOLO11s) on every STEP-th frame; the pitch band is split into 3 overlapping tiles | `START` resumes from a frame and appends to `OUT.jsonl` |
 | `python src/follow.py VIDEO DETECTIONS OUT_DIR [--balls FILE] [--no-debug \| --debug-only] [--no-render] [--range A-B] [--goals CHECKLIST.json] [--set key=value ...]` | Builds the virtual camera path and renders it | Without flags renders both videos. `--no-render`: only `camera_path.npz` and `metrics.json` (seconds instead of minutes). `--range 168-180`: render only that segment (seconds) to `out_*_168-180.mp4`. `--goals`: use hand-measured goals from a checklist instead of automatic ones (tests only). `--set`: override a `CFG` parameter, value in JSON (`--set goal_zone=[0.08,0.16]`). Tunable parameters are in the `CFG` dict at the top of the file |
 | `python src/ball_bgdiff.py VIDEO FILE.jsonl [FILE2.jsonl ...]` | For every ball detection, how much the spot differs from the background (median of 15 frames); writes `FILE.bg.jsonl` with a 6th value per box | `follow.py` picks up `*.bg.jsonl` automatically and drops boxes below `ball_bg_min` (15): letters on the grass score 6–11, real balls 20+. About 1–1.5 min per 4-minute match |
+| `python src/pipeline.py VIDEO OUT_DIR [--step N] [--checklist C.json] [--highlights] [--from STEP] [--no-render] [--range A-B]` | Runs the whole pipeline with skip and resume | Steps: detect, pass1, window, merge, bgdiff, final, checks, highlights. `--from` recomputes that step and all later ones |
+| `python src/highlights.py FINAL_DIR OUT_DIR [--checklist C.json] [--top N] [--min-score S]` | Cuts highlight clips from `out_follow.mp4`: goal-area episodes, each from 8 s before the first dangerous moment to 4 s after the last (≤ 20 s), with a danger score from ball distance to goal and extra players near goal | With a checklist, reports which goals and chances are inside a clip. `--top N` keeps the N most dangerous |
 | `python src/goals.py VIDEO DETECTIONS [CHECKLIST.json] [--vis OUT.jpg]` | Finds both goals automatically: the left and right tips of the area where players spend the match | With a checklist prints the error against hand-measured goals; `--vis` draws the play area and goals on the median frame |
 | `python src/check_goals.py CAMERA_PATH.npz CHECKLIST.json [FPS]` | Goal checklist: for each goal or shot listed in `specs/checklists/matchN.json`, the share of frames from 2 s before to 1 s after where the goal mouth is fully inside the crop | PASS at ≥ 90%. Add every goal you see in a test video to its checklist |
 | `python src/compare_crops.py VIDEO OUT.jpg T0 T1 STEP NAME=PATH.npz [NAME=PATH.npz ...]` | Frames of several camera versions side by side, one row per moment from T0 to T1 seconds | Use for every checklist event: metrics do not show how big the goal is in the frame |

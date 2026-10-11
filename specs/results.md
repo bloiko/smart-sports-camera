@@ -40,6 +40,18 @@ Notes:
 - Background filter (`ball_bgdiff.py`, `ball_bg_min=15`) changes the v0.3 rows by at most 0.3 points (match 1: found 26.8%, match 2: 59.1%, in crop 98.3%); it removes static look-alikes such as logo letters on the grass (owner feedback on match 2, 0:46.8).
 - v0.3 includes the "border zoom": near the pitch ends the curved black top border of these stitched panoramas pushed the crop down (empty near-side grass); when pushed by more than 20% of its height, the crop now zooms in up to 25%. Raw metrics: `specs/metrics/matchN_v03.json`.
 
+## Highlights (`src/highlights.py`, 2026-10-11)
+
+Clips = goal-area episodes of v0.3, each from 8 s before the first dangerous moment to 4 s after the last, at most 20 s. Danger = mean of ball proximity to the goal and extra players near the goal.
+
+| Match | Clips | Total length | Checklist events inside a clip |
+| --- | --- | --- | --- |
+| 1 | 4 | 64 s of 4:00 | 1 of 1 (goal 2:54.8) |
+| 2 | 6 | 76 s | 1 of 1 (chance 3:38) |
+| 3 | 7 | 98 s | 2 of 2 (chance 1:25, goal 2:04.7) |
+
+The danger score does not single out goals yet: the match 3 goal scores 0.50, below three non-goal clips. Clip windows were tuned on these 4 events (first version cut the match 1 goal at the clip start because the peak was the celebration, the second dropped the match 3 chance).
+
 ## Automatic goal finding (`src/goals.py`)
 
 Error of the automatic goal position against hand-measured goal mouths (`specs/checklists/`). A goal mouth is about 120–145 px wide in these panoramas; `follow.py` adds an 80 px margin around automatic goals.
@@ -77,5 +89,6 @@ Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measu
 | --- | --- | --- | --- |
 | 1 | Goal at 2:54.8, left goal (owner: 2:50–2:57) | **No**: camera ~800 px to the right of the goal | v0.2 |
 | 1 | Goal at 2:54.8, left goal | **Yes**: goal mouth in frame 100% of 2:52.8–2:55.8 (automatic goals) | v0.3 |
+| 3 | Goal at 2:04.7, right goal (owner: 2:05 ± 10 s; time found on frames) | **No** in v0.2: goal mouth fully in frame 36% of 2:02.7–2:05.7. **Yes** in v0.3: 100% | v0.2, v0.3 |
 | 3 | Chance at 1:25, left goal, no goal (owner) | **No** in v0.2: goal mouth fully in frame only 28% of 1:23–1:26, cut by the left edge. **Yes** in v0.3: 100%, keeper and attack visible | v0.2, v0.3 |
 | 2 | Chance at 3:38, left goal, no goal (owner) | **Yes** in both, but in v0.2 the goal is a tiny corner of the frame and a third of the frame is the logo on the near grass; v0.3 shows goal, keeper and players large (frames compared 3:35–3:41) | v0.2, v0.3 |

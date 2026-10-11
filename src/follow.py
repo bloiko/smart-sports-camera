@@ -12,6 +12,7 @@ import numpy as np, cv2
 
 SRC, DET = sys.argv[1], sys.argv[2]
 OUT = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else '.'
+import os; os.makedirs(OUT, exist_ok=True)
 
 # ---------- параметри (усе, що варто крутити) ----------
 CFG = dict(
@@ -366,7 +367,9 @@ metrics = dict(
     goal_mode_share=round(float(GON.mean()), 3), goals=[[round(float(v)) for v in g] for g in GOALS], cfg=CFG)
 json.dump(metrics, open(f'{OUT}/metrics.json', 'w'), indent=2, ensure_ascii=False)
 print(json.dumps({k: v for k, v in metrics.items() if k != 'cfg'}, indent=1))
-np.savez(f'{OUT}/camera_path.npz', X=X, Y=Y, CW=CW, CH=CH, GW=GW, GON=GON)
+np.savez(f'{OUT}/camera_path.npz', X=X, Y=Y, CW=CW, CH=CH, GW=GW, GON=GON, GI=GI, FPS=FPS,
+         BX=BX, BY=BY, GOALS=np.array(GOALS), GOAL_DIST=GOAL_DIST,          # для highlights.py
+         S_FRAMES=frames, ZN=_zn, ZONE_BASE=np.array(ZONE_BASE))
 
 # ---------- 6. рендер ----------
 # --range 165-185: рендерити лише цей відрізок (секунди) у out_*_165-185.mp4 — для швидкої перевірки

@@ -7,7 +7,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
 ## P0: now
 
 ### 1. Goal checklist for matches 2 and 3
-- **Problem:** only two events are checked automatically (match 1 goal at 2:54.8, match 2 chance at 3:38, match 3 chance at 1:25); the rest of matches 2 and 3 is not reviewed, so a regression there would go unnoticed.
+- **Problem:** only two events are checked automatically (match 1 goal at 2:54.8, match 2 chance at 3:38, match 3 chance at 1:25 and goal at 2:04.7); the rest of matches 2 and 3 is not reviewed, so a regression there would go unnoticed.
 - **Ideas:** ask the owner; otherwise scan zoomed goal areas around the attack episodes found from player counts near each goal (match 2: left 2:03–3:53, right 0:04–1:09; match 3: many).
 - **Done when:** `specs/checklists/match2.json` and `match3.json` list every goal and shot on target, and `check_goals.py` passes on v0.3.
 
@@ -16,6 +16,11 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - `src/make_dataset.py` builds the multi-match dataset. Snapping now uses brightness relative to the local grass (V above the local median + 45, low saturation); not yet checked on match 3.
 - Use the v0.3 ball tracks (`work/mN/final_v03/ball_track.json`): v0.2 tracks contained logo letters and spare balls, which would become false labels.
 - Re-check the contact sheet of labels per match, then train (`src/train.py`, start from `ball_v02.pt`), evaluate on the held-out last 20% of each match, add rows to `results.md`.
+
+### 3a. Highlights: recognise goals (F13)
+- **Problem:** the danger score ranks the match 3 goal (0.50) below three non-goal clips; 64–98 s of clips per 4 minutes would be ~25–35 minutes for a 90-minute match.
+- **Ideas:** detect the kickoff after a goal (all players back in their own halves, ball still at the centre spot for several seconds) and mark the preceding goal-area episode as a goal; celebration (attacking team clustered and slow); ball speed towards the goal (shot).
+- **Done when:** every goal in the checklists is labelled as a goal and ranked above all non-goal clips; a "top N" reel of a 90-minute match is ≤ 3 minutes.
 
 ### 3. Goal-area framing: remaining issues
 - **Problem:** in goal mode the stitched panorama's curved black border pushes the crop down, so the goal sits at the top edge with empty near-side grass below; players in frame fell by ~6 points; goal mode is on 22–32% of the time, tuned on a single goal event.
@@ -39,4 +44,3 @@ Last updated: 2026-10-11 (session 2, docs synced)
 9. Lead the play and widen the crop when tracking is uncertain.
 10. Vertical 9:16 output (F6).
 11. Translate code comments and docstrings to English.
-12. A single `pipeline.py` that runs all steps with resume, instead of separate commands.

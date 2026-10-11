@@ -35,3 +35,13 @@ def field_mask(src, n=7):
     g = cv2.morphologyEx(g * 255, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
     g = cv2.morphologyEx(g, cv2.MORPH_CLOSE, np.ones((41, 41), np.uint8))
     return _largest(g), med
+
+
+if __name__ == '__main__':
+    # Preview: python src/fieldmask.py game.mp4  ->  fieldmask.jpg (field highlighted) + fieldmask.npy
+    import sys
+    m, med = field_mask(sys.argv[1])
+    vis = med.copy(); vis[m == 0] = (vis[m == 0] * 0.3).astype(np.uint8)
+    cv2.imwrite('fieldmask.jpg', cv2.resize(vis, (2048, int(2048 * vis.shape[0] / vis.shape[1]))))
+    np.save('fieldmask.npy', m)
+    print('field share of frame:', round(float(m.mean()), 3))

@@ -1,14 +1,16 @@
-# відео і проміжні дані
+# Videos and intermediate data (never commit footage)
 *.mp4
 *.mov
 *.jsonl
 *.npz
 *.npy
 *.log
+work/
 dataset/
 runs/
 out*/
+fieldmask.jpg
 __pycache__/
 .venv/
-# стандартні ваги YOLO завантажуються автоматично
+# Stock YOLO weights are downloaded automatically by Ultralytics
 yolo11*.pt

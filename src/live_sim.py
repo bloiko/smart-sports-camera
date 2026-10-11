@@ -34,8 +34,13 @@ BG_EVERY_S, BG_N, BG_MIN = 3.0, 9, 15
 CAM = dict(out_w=1920, out_h=1080, spread_k=1.4, focus_px=300, min_crop_w=[800, 1700], max_crop_w=[1600, 2800],
            ball_weight=0.7, ball_hold_s=0.6, smooth_s=0.8, max_speed=900, catch_k=2.5, margin=0.08,
            goal_zone=[0.08, 0.16], goal_attack_n=5, goal_box_k=0.1, goal_unc=80, goal_min_data_s=30, goal_every_s=10,
-           anticipate_s=2.0, lost_zoom=1.35, confirm_s=0.6, confirm_px=200)   # м'яч загублено → кадр ширше: матч 3 м'яч у кадрі 63% → 83%   # режим воріт вмикається не раніше ніж за 2 с: з 5 с камера показувала порожні ворота,
-                               # поки гра ще в центрі (матч 2, 0:58)
+           # режим воріт вмикається не раніше ніж за 2 с: з 5 с камера показувала порожні ворота, поки гра в центрі (матч 2, 0:58)
+           anticipate_s=2.0,
+           lost_zoom=1.35,          # м'яч загублено → кадр ширше (матч 3: м'яч у кадрі 63% → 83%)
+           confirm_s=0.6, confirm_px=200,   # м'яч приймається лише з другою детекцією поруч (спалахи смикали камеру)
+           mirror=1,                # ворота ще не відвіданої сторони — віддзеркаленням через центральну лінію
+           goal_hold_s=2.0,         # режим воріт тримається ще 2 с після атаки (гол матчу 1 без цього губився)
+           border_shift_max=150)    # ворота під вигнутою межею панорами → кадр до 150 px до центру (матч 2, 3:38)
 
 
 def arg(name, default=None):
@@ -166,8 +171,12 @@ def camera(det, video, B_s):
         return np.array(o) if o else np.zeros((0, 2))
 
     # ворота — лише за вже побаченими гравцями (LiveGoals: оцінка лише розширюється назовні), оновлення кожні goal_every_s
-    from goals import LiveGoals
-    lg = LiveGoals(fmd, PLAYER_EVERY / fps); goals_at = np.full((N, 2, 2), np.nan); seen_rows = []; G = None
+    from goals import LiveGoals, centre_line
+    cline = None
+    if C['mirror']:
+        fm10, med10 = field_mask(video, until_s=10)             # лише перші 10 с трансляції
+        cline = centre_line(fm10, med10)[0]
+    lg = LiveGoals(fmd, PLAYER_EVERY / fps, centre=cline); goals_at = np.full((N, 2, 2), np.nan); seen_rows = []; G = None
     next_g = C['goal_min_data_s'] * fps
     for f in range(N):
         if 'persons' in det[f]: seen_rows.append({'frame': f, 'persons': det[f]['persons']}); lg.add(det[f]['persons'])
@@ -230,9 +239,13 @@ def camera(det, video, B_s):
         TX[f], TY[f], TW[f] = c[0], c[1], cw
 
     # режим воріт з гістерезисом (вмикання видно лише після B кадрів затримки — це нормально)
-    GON = np.zeros(N, bool); on = False
+    GON = np.zeros(N, bool); on = False; low = 0
     for f in range(N):
-        on = GW[f] > 0.5 if not on else GW[f] > 0.25; GON[f] = on
+        if not on: on = GW[f] > 0.5; low = 0
+        else:                                                     # вимикаємо, лише якщо сигнал слабкий goal_hold_s поспіль
+            low = low + 1 if GW[f] <= 0.25 else 0
+            on = low < C['goal_hold_s'] * fps
+        GON[f] = on
     # випередження: з буфером B режим воріт, що ввімкнеться в межах min(B, anticipate_s), вмикаємо вже зараз (камера повертає до воріт
     # до удару, а не після); ворота епізоду — ті, що будуть
     if B > 0:
@@ -245,6 +258,7 @@ def camera(det, video, B_s):
     # вихід: для кадру f — лише цілі до f + B
     asp = C['out_h'] / C['out_w']; sig = C['smooth_s'] * fps; P = int(3 * sig)
     X, Y, CW = np.zeros(N), np.zeros(N), np.zeros(N); YLO, YHI = np.full(N, np.inf), np.full(N, -np.inf)
+    LOX, HIX = np.full(N, -np.inf), np.full(N, np.inf)            # допустимі межі центру кадру по x (м'яч, ворота)
     vmax, vcatch = C['max_speed'] / fps, C['catch_k'] * C['max_speed'] / fps
     for f in range(N):
         a, b = max(0, f - P), min(N - 1, f + min(B, P))
@@ -276,6 +290,7 @@ def camera(det, video, B_s):
             x = X[f - 1] + np.clip(x - X[f - 1], -lim, lim); y = Y[f - 1] + np.clip(y - Y[f - 1], -vmax, vmax)
             cw = CW[f - 1] + np.clip(cw - CW[f - 1], -vmax, vmax)
         X[f], Y[f], CW[f] = x, y, cw; YLO[f], YHI[f] = ylo, yhi
+        if lo_x <= hi_x: LOX[f], HIX[f] = lo_x, hi_x
     CW = np.minimum(CW, H / asp); CH = CW * asp
     X = np.clip(X, CW / 2, W - CW / 2); Y = Y - CH * 0.08
     for f in range(N):                                            # вертикальні обмеження (м'яч, ворота)
@@ -288,8 +303,24 @@ def camera(det, video, B_s):
     for f in range(N):
         a, b = int(max(0, X[f] - CW[f] / 2)), int(min(W, X[f] + CW[f] / 2))
         push = (top[a:b].max() - (Y[f] - CH[f] / 2)) / CH[f]
-        if push > 0.2: ZF[f] = max(0.75, 1 - (push - 0.2))
+        if push > 0.2 and not GON[f]: ZF[f] = max(0.75, 1 - (push - 0.2))   # у режимі воріт не звужуємо: обріже ворота
     ZF = gauss_causal(ZF, int(0.6 * fps)); CW = CW * ZF; CH = CW * asp
+    # верх воріт вище за вигнуту чорну межу над краєм кадру → зсуваємо кадр до центру панорами (там межа нижча).
+    # Потрібний зсув рахуємо для кожного кадру, далі максимум у вікні [f − 0.5 с, f + буфер] і середнє по минулих
+    # 0.5 с: плавно і не менше потрібного. Горизонтальні обмеження (м'яч, ворота) не порушуємо.
+    NS = np.zeros(N)
+    for f in range(N):
+        if YLO[f] < np.inf and GON[f] and GI[f] >= 0:             # лише ворота біля краю панорами
+            step = 10 if GI[f] == 0 else -10; sh = 0
+            for _ in range(C['border_shift_max'] // 10):
+                a, b = int(max(0, X[f] + sh - CW[f] / 2)), int(min(W, X[f] + sh + CW[f] / 2))
+                if top[a:b].max() <= YLO[f]: break
+                sh += step
+            NS[f] = sh
+    if NS.any():
+        h = int(0.5 * fps); la = min(B, int(2 * fps)); mag = np.abs(NS); M = np.zeros(N)
+        for f in range(N): M[f] = mag[max(0, f - h):f + la + 1].max()
+        sgn = np.where(GI == 1, -1.0, 1.0); X = np.clip(X + sgn * gauss_causal(M, h), LOX, HIX)
     for f in range(N):                                            # усередині зображення
         a, b = int(X[f] - CW[f] / 2), int(X[f] + CW[f] / 2); t, bt = top[max(a, 0):b].max(), bot[max(a, 0):b].min()
         if bt - t < CH[f]: CH[f] = bt - t; CW[f] = CH[f] / asp; X[f] = np.clip(X[f], CW[f] / 2, W - CW[f] / 2)
@@ -309,6 +340,8 @@ def metrics(path, ref_dir, video):
         tr = {int(k): v for k, v in json.load(open(os.path.join(ref_dir, 'ball_track.json'))).items()}
         ins = [X[f] - CW[f] / 2 <= x <= X[f] + CW[f] / 2 and Y[f] - CH[f] / 2 <= y <= Y[f] + CH[f] / 2 for f, (x, y) in tr.items() if f < len(X)]
         out['ref_ball_in_crop'] = round(float(np.mean(ins)), 3)
+        early = [v for (f, _), v in zip([(f, 0) for f in tr if f < len(X)], ins) if f < 120 * fps]
+        out['first2min_ball_in_crop'] = round(float(np.mean(early)), 3) if early else None
         det = os.path.join(os.path.dirname(ref_dir.rstrip('/')), 'detections.jsonl')
         fm = cv2.dilate(field_mask(video)[0], np.ones((41, 41), np.uint8)); H, W = fm.shape; pin = []
         for l in open(det):

@@ -34,7 +34,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
 ### 3b. Live: next steps
 - Measure YOLO11n/s Core ML on the iPhone 15 (1 vs 2 tiles at 1280, ball tile at 640) — decides the real detection budget.
 - Live ball search for evening / pale grass (match 3 ball in crop 74%): ball candidates from player motion, a second ball model pass when lost.
-- Goals in the first 1–2 minutes: no goal mode until the estimate is stable, or a wider margin early.
+- Goals in the first 30–60 s: done partly (mirror through the halfway line). Open: an estimate before 30 s (halfway line + field mask ends?), and remembering goals of a pitch the owner plays on every week.
 
 ## P1: next
 

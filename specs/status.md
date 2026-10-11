@@ -125,14 +125,17 @@ Last updated: 2026-10-11 (session 2, docs synced)
 **Done**
 - `src/live_sim.py`: real-time camera with a phone-like detection budget and a delay buffer; `LiveGoals` in `src/goals.py` (goals from already-seen players).
 - Buffer study on 3 matches: 2 s is the minimum that passes all 7 checklist events and keeps the camera smooth; 3–5 s add nothing measurable. Results in `results.md`.
+- Goals in the first minutes: mirrored through the halfway line (`centre_line`), error at 30–60 s down from ~900 px to 54–125 px in matches 2 and 3; match 1 still unknown at 30 s, fine from 60 s.
 
 **To do**
 - Measure the detection budget on a real iPhone (Core ML); it may change the number of tiles.
-- Better live ball search in the evening / pale-grass case (match 3: 74% ball in crop vs 100% offline).
-- Goals during the first 1–2 minutes of a broadcast are unreliable.
+- Better live ball search in the evening / pale-grass case (match 3: 81% ball in crop vs 100% offline).
+- No goal estimate before 30 s, and in match 1 both goals are still wrong at 30 s.
 
 **Difficulties**
 - Moving the offline camera to live broke 3 of 7 events at first; each fix was checked against the checklist (see `results.md`).
+- Fixing one thing exposed another: correct early goals made the attack trigger weaker (the usual count near the goal now includes the keeper), and the match 1 goal was lost until goal mode got a 2 s hold.
+- Nobody stands near one of the goals during the first minute (the keeper plays far out), so players alone cannot find it; the halfway line can.
 
 **Lessons learned**
 - A YouTube delay of a few seconds is free look-ahead: 2 s of it removes most of the live penalty.

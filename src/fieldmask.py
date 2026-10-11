@@ -12,8 +12,10 @@ def _largest(g):
     m = np.zeros_like(comp); cv2.drawContours(m, [max(cnts, key=cv2.contourArea)], -1, 1, -1)
     return m
 
-def field_mask(src, n=7):
+def field_mask(src, n=7, until_s=None):
+    """until_s: брати кадри лише з перших until_s секунд (live: майбутнього ще немає)."""
     cap = cv2.VideoCapture(src); N = int(cap.get(7)); fr = []
+    if until_s: N = min(N, int(until_s * cap.get(5)))
     for k in range(n):
         cap.set(1, int(N * (k + 0.5) / n)); ok, im = cap.read(); fr.append(im)
     med = np.median(np.stack(fr), axis=0).astype(np.uint8)

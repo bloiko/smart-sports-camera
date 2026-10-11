@@ -79,12 +79,13 @@ Last updated: 2026-10-11 (session 2)
   - Ball as a hard constraint (inside the crop with a margin), short track gaps filled; ball in crop 98–100% (v0.2: 82–90%).
   - Spare-ball filter: a ball lying still for 2 s or returning to the same spot for 60 s with no player within 1.3 player heights. Removed the logo letter "f" and corner-flag balls; precision 22–24 of 24 on all matches.
   - Smooth catch-up instead of jumps when the ball reappears far away (two-sided speed cap 2250 px/s).
+  - Background filter (`src/ball_bgdiff.py`): a "ball" that looks the same as the median background is a static look-alike (letters painted on the grass, dummies) and is dropped. Owner spotted the logo letter "O" counted as a ball in match 2.
   - Border zoom: near the pitch ends the crop zooms in (up to 25%) instead of showing empty near-side grass under the curved panorama border.
   - Players in frame fell from 64–71% to 56–62%: the price of keeping the ball and goals in frame.
 - Tools: `src/check_goals.py` (automatic goal checklist), `src/ball_sheet.py` (precision contact sheets), `follow.py --no-render / --range / --set / --goals`, MPS (Apple GPU) in `detect.py` and `ball_window.py`. Pipeline now runs on the owner's M1 Mac (detection of 4 minutes ≈ 11 min).
 
 **To do** (details and priorities in `backlog.md`)
-- Fill the goal checklist for matches 2 and 3 (goals and shots with timestamps).
+- Fill the goal checklist for matches 2 and 3 (match 2: chance at 3:38 added from the owner).
 - Model v0.3: train on 3 matches using the cleaner v0.3 ball tracks, evaluate on held-out minutes of each.
 - Switch to an Apache-2.0 detector before any closed release.
 - Manual labels for hard cases; golden clips with ground truth; goal checklist.

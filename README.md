@@ -47,10 +47,13 @@ BALL_MODEL=models/ball_v02.pt  python src/ball_window.py game.mp4 work/pass1/cam
 # 4. Merge both models (each with its own confidence threshold).
 python src/merge_balls.py work/balls.jsonl work/ball_base.jsonl:0.25 work/ball_v02.jsonl:0.4
 
-# 5. Final camera pass and render (goals are found automatically, see src/goals.py).
+# 5. Mark detections that look like the static background (letters painted on the grass, lines, dummies).
+python src/ball_bgdiff.py game.mp4 work/detections.jsonl work/balls.jsonl
+
+# 6. Final camera pass and render (goals are found automatically, see src/goals.py; *.bg.jsonl are used when present).
 python src/follow.py game.mp4 work/detections.jsonl work/final --balls work/balls.jsonl
 
-# 6. Checks: goal checklist and a contact sheet of accepted balls (count real balls by eye).
+# 7. Checks: goal checklist and a contact sheet of accepted balls (count real balls by eye).
 python src/check_goals.py work/final/camera_path.npz specs/checklists/match1.json
 python src/ball_sheet.py game.mp4 work/final/ball_track.json work/ball_sheet.jpg 24
 ```
@@ -64,6 +67,7 @@ Outputs in `work/final/`: `out_follow.mp4` (the result), `out_debug.mp4` (panora
 | `python src/fieldmask.py game.mp4` | Finds the pitch (grass) and writes `fieldmask.jpg` (pitch highlighted) and `fieldmask.npy` | Check this first on a new stadium; prints the pitch share of the frame |
 | `python src/detect.py VIDEO OUT.jsonl [STEP] [START]` | Detects players and balls (YOLO11s) on every STEP-th frame; the pitch band is split into 3 overlapping tiles | `START` resumes from a frame and appends to `OUT.jsonl` |
 | `python src/follow.py VIDEO DETECTIONS OUT_DIR [--balls FILE] [--no-debug \| --debug-only] [--no-render] [--range A-B] [--goals CHECKLIST.json] [--set key=value ...]` | Builds the virtual camera path and renders it | Without flags renders both videos. `--no-render`: only `camera_path.npz` and `metrics.json` (seconds instead of minutes). `--range 168-180`: render only that segment (seconds) to `out_*_168-180.mp4`. `--goals`: use hand-measured goals from a checklist instead of automatic ones (tests only). `--set`: override a `CFG` parameter, value in JSON (`--set goal_zone=[0.08,0.16]`). Tunable parameters are in the `CFG` dict at the top of the file |
+| `python src/ball_bgdiff.py VIDEO FILE.jsonl [FILE2.jsonl ...]` | For every ball detection, how much the spot differs from the background (median of 15 frames); writes `FILE.bg.jsonl` with a 6th value per box | `follow.py` picks up `*.bg.jsonl` automatically and drops boxes below `ball_bg_min` (15): letters on the grass score 6–11, real balls 20+. About 1–1.5 min per 4-minute match |
 | `python src/goals.py VIDEO DETECTIONS [CHECKLIST.json] [--vis OUT.jpg]` | Finds both goals automatically: the left and right tips of the area where players spend the match | With a checklist prints the error against hand-measured goals; `--vis` draws the play area and goals on the median frame |
 | `python src/check_goals.py CAMERA_PATH.npz CHECKLIST.json [FPS]` | Goal checklist: for each goal or shot listed in `specs/checklists/matchN.json`, the share of frames from 2 s before to 1 s after where the goal mouth is fully inside the crop | PASS at ≥ 90%. Add every goal you see in a test video to its checklist |
 | `python src/ball_sheet.py VIDEO TRACK.json OUT.jpg [N] [--minus OTHER_TRACK.json] [--seed S]` | Contact sheet of N random accepted ball positions (240 px crops, red circle) for counting precision by eye | `--minus`: only points that another version accepted and this one did not (or vice versa) |

@@ -45,6 +45,7 @@
     "goal_attack_n": 5,
     "ball_gate_px": 350,
     "ball_weight": 0.7,
+    "ball_bg_min": 15,
     "window_ball_conf": 0.4,
     "smooth_sigma_s": 0.8,
     "max_speed_px_s": 900,

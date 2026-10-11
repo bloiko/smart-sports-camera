@@ -27,6 +27,7 @@ CFG = dict(
     goal_attack_n=5,                    # атака: у зоні воріт на стільки гравців більше, ніж зазвичай (медіана)
     ball_gate_px=350,                   # макс. стрибок м'яча між відліками (у пікселях панорами)
     ball_weight=0.7,
+    ball_bg_min=15,                     # мін. різниця з фоном (ball_bgdiff.py): букви на газоні 6–11, м'ячі ≥ 20
     window_ball_conf=0.4,               # поріг для м'ячів зі збільшеного вікна                    # наскільки м'яч тягне камеру (решта — гравці)
     smooth_sigma_s=0.8,                 # згладжування (с), двостороннє — без запізнення
     max_speed_px_s=900,                 # обмеження швидкості панорамування
@@ -50,13 +51,22 @@ for _k, _a in enumerate(sys.argv):
 cap = cv2.VideoCapture(SRC)
 W, H = int(cap.get(3)), int(cap.get(4))
 FPS = cap.get(5); N = int(cap.get(7))
+import os
+def _bg(path):            # v0.3: якщо є path.bg.jsonl (ball_bgdiff.py) — беремо його: там різниця з фоном
+    p = path.rsplit('.', 1)[0] + '.bg.jsonl'
+    return p if os.path.exists(p) and os.path.getmtime(p) >= os.path.getmtime(path) else path
+def _not_bg(b):           # детекція, що збігається з фоном (буква на газоні, лінія), — не м'яч
+    return len(b) < 6 or b[5] >= CFG['ball_bg_min']
+DET = _bg(DET)
 rows = [json.loads(l) for l in open(DET)]
+for r in rows: r['balls'] = [b for b in r['balls'] if _not_bg(b)]
 # v0.2: додаткові детекції м'яча зі збільшеного вікна (ball_window.py)
 if '--balls' in sys.argv:
     extra = {}
-    for l in open(sys.argv[sys.argv.index('--balls') + 1]):
-        r = json.loads(l); extra[r['frame']] = [b for b in r['balls'] if b[4] >= CFG['window_ball_conf']]
+    for l in open(_bg(sys.argv[sys.argv.index('--balls') + 1])):
+        r = json.loads(l); extra[r['frame']] = [b for b in r['balls'] if b[4] >= CFG['window_ball_conf'] and _not_bg(b)]
     for r in rows: r['balls'] = r['balls'] + extra.get(r['frame'], [])
+print('detections:', DET, flush=True)
 frames = np.array([r['frame'] for r in rows])
 N = min(N, int(frames[-1]) + 1)   # дозволяє тестувати на частково обробленому відео
 

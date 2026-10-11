@@ -7,7 +7,7 @@ Last updated: 2026-10-11 (session 2)
 ## P0: now
 
 ### 1. Goal checklist for matches 2 and 3
-- **Problem:** only one event (match 1 goal) is checked automatically; matches 2 and 3 have no goals or shots listed, so a regression there would go unnoticed.
+- **Problem:** only two events are checked automatically (match 1 goal at 2:54.8, match 2 chance at 3:38); the rest of matches 2 and 3 is not reviewed, so a regression there would go unnoticed.
 - **Ideas:** ask the owner; otherwise scan zoomed goal areas around the attack episodes found from player counts near each goal (match 2: left 2:03–3:53, right 0:04–1:09; match 3: many).
 - **Done when:** `specs/checklists/match2.json` and `match3.json` list every goal and shot on target, and `check_goals.py` passes on v0.3.
 

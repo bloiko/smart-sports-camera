@@ -37,6 +37,7 @@ Detection rerun locally (Ultralytics 8.4, MPS), ball window searched along the v
 Notes:
 - The v0.2 rows of 2026-10-10 for match 1 (29.6% found, 98.3% in crop) are not comparable: they were measured with an older `detect.py` (fixed detection band). With the current detection the v0.2 tracker also accepts the letter "f" of the "University of Tsukuba" logo and spare balls at the right corner flag.
 - v0.3 trades some players in frame (−7 to −8 points) for the ball (+8 to +18 points) and goals. The pan speed exceeds 900 px/s in 0.2–0.8% of frames (catch-up moves).
+- Background filter (`ball_bgdiff.py`, `ball_bg_min=15`) changes the v0.3 rows by at most 0.3 points (match 1: found 26.8%, match 2: 59.1%, in crop 98.3%); it removes static look-alikes such as logo letters on the grass (owner feedback on match 2, 0:46.8).
 - v0.3 includes the "border zoom": near the pitch ends the curved black top border of these stitched panoramas pushed the crop down (empty near-side grass); when pushed by more than 20% of its height, the crop now zooms in up to 25%. Raw metrics: `specs/metrics/matchN_v03.json`.
 
 ## Automatic goal finding (`src/goals.py`)
@@ -65,12 +66,15 @@ Error of the automatic goal position against hand-measured goal mouths (`specs/c
 | 2026-10-11 | 1 | v0.3 | 24 of 24 (random sample); an earlier sample 23 of 24 (white mark on the kerb) |
 | 2026-10-11 | 2 | v0.3 | 23 of 24 (one on the "SOO" logo letters) |
 | 2026-10-11 | 3 | v0.3 | 22 of 24 (a spare ball off the pitch, one unclear dark dot) |
+| 2026-10-11 | 2 | v0.3 + background filter, points removed by the filter | 3 of 3 false: letter "O" of the logo on the grass (2), yellow training dummies (1) |
+| 2026-10-11 | 1 / 3 | v0.3 + background filter | 24 of 24 / 23 of 24 (a player's head) |
 
 ## Goal checklist
 
-Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measured by hand + events); `src/check_goals.py` checks them. Matches 2 and 3 have no events listed yet.
+Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measured by hand + events); `src/check_goals.py` checks them. Match 2 has one event from the owner; match 3 has none yet.
 
 | Match | Goal / shot (time) | Visible in output? | Version |
 | --- | --- | --- | --- |
 | 1 | Goal at 2:54.8, left goal (owner: 2:50–2:57) | **No**: camera ~800 px to the right of the goal | v0.2 |
 | 1 | Goal at 2:54.8, left goal | **Yes**: goal mouth in frame 100% of 2:52.8–2:55.8 (automatic goals) | v0.3 |
+| 2 | Chance at 3:38, left goal, no goal (owner) | **Yes** in both, but in v0.2 the goal is a tiny corner of the frame and a third of the frame is the logo on the near grass; v0.3 shows goal, keeper and players large (frames compared 3:35–3:41) | v0.2, v0.3 |

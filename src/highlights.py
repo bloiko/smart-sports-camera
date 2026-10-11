@@ -14,6 +14,7 @@
 import json, os, subprocess, sys, numpy as np
 
 BEFORE, AFTER, MAX_LEN, MIN_EP = 8.0, 4.0, 20.0, 2.5      # секунди
+MIN_SCORE = 0.3   # нижче — на перегляді 2026-10-11 жодного небезпечного моменту (гравці в зоні без м'яча)
 
 
 def arg(name, default=None):
@@ -53,7 +54,7 @@ def main():
     for f in os.listdir(out):                         # кліпи попереднього запуску
         if f.startswith('clip_') and f.endswith('.mp4'): os.remove(os.path.join(out, f))
     ms = moments(np.load(os.path.join(final, 'camera_path.npz')))
-    ms = [m for m in ms if m['score'] >= float(arg('--min-score', 0))]
+    ms = [m for m in ms if m['score'] >= float(arg('--min-score', MIN_SCORE))]
     if arg('--top'): ms = sorted(sorted(ms, key=lambda m: -m['score'])[:int(arg('--top'))], key=lambda m: m['start'])
     video = os.path.join(final, 'out_follow.mp4'); files = []
     for k, m in enumerate(ms, 1):

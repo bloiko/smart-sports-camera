@@ -52,6 +52,8 @@ Clips = goal-area episodes of v0.3, each from 8 s before the first dangerous mom
 
 With the 3 attacks added to match 2 later: 7 of 7 checklist events are inside a highlight clip.
 
+**Review by Claude (2026-10-11, frames every 2 s of all three reels):** about 10 of 17 clips show a real moment near the goal; the weak ones are mostly "players in the goal zone, no ball": the keeper alone with players far away, or play in midfield with the camera framing the goal. All three clips with danger < 0.3 were weak and none held a checklist event, so the default threshold is now 0.3: 14 clips, 48 / 56 / 98 s, still 7 of 7 events. Other findings: hard cuts between clips with no time label (the viewer loses which goal and when); some clips start at the centre circle; goals on the far side look small in a 16:9 crop.
+
 The danger score does not single out goals yet: the match 3 goal scores 0.50, below three non-goal clips. Clip windows were tuned on these 4 events (first version cut the match 1 goal at the clip start because the peak was the celebration, the second dropped the match 3 chance).
 
 ## Automatic goal finding (`src/goals.py`)

@@ -56,6 +56,16 @@ With the 3 attacks added to match 2 later: 7 of 7 checklist events are inside a 
 
 The danger score does not single out goals yet: the match 3 goal scores 0.50, below three non-goal clips. Clip windows were tuned on these 4 events (first version cut the match 1 goal at the clip start because the peak was the celebration, the second dropped the match 3 chance).
 
+### Goal recognition by kickoff (`src/kickoff.py`, 2026-10-11)
+
+| Match | Goals (checklist) | Kickoffs found | Max team separation | Clips labelled GOAL |
+| --- | --- | --- | --- | --- |
+| 1 | 2:54.8 | 3:14.8 (20 s after the goal), confirmed on frames | 0.80 | 1, correct |
+| 2 | none | none | 0.68 | 0 |
+| 3 | 2:04.7 | 2:28.0 (23 s after the goal) | 0.80 (start of video, a kickoff with no goal before it: 0.74) | 1, correct |
+
+Threshold 0.77. The margin is small (0.80 vs 0.74) and rests on 2 goals: re-check on every new video. With goals marked, the reels are 52 / 56 / 103 s; goals-only reels 23 s and 25 s.
+
 ## Automatic goal finding (`src/goals.py`)
 
 Error of the automatic goal position against hand-measured goal mouths (`specs/checklists/`). A goal mouth is about 120–145 px wide in these panoramas; `follow.py` adds an 80 px margin around automatic goals.

@@ -31,6 +31,7 @@ On-device budget: one or two 640 px passes per frame (the whole frame downscaled
 | Background check | `src/ball_bgdiff.py` | video + ball files → `*.bg.jsonl`: how much each ball detection differs from the static background |
 | Goal finding | `src/goals.py` (called by `follow.py`) | detections → left and right goal positions |
 | Virtual camera, final | `src/follow.py --balls` | detections + balls → `out_follow.mp4`, `out_debug.mp4`, `metrics.json`, `ball_track.json` |
+| Highlights | `src/highlights.py` (+ `src/kickoff.py`) | camera path + rendered video → clips of goal-area episodes; the episode before a kickoff is a goal |
 | Checks | `src/check_goals.py`, `src/ball_sheet.py`, `src/compare_crops.py` | camera path / ball track → goal checklist, precision contact sheet, side-by-side frames of two versions |
 | Pseudo-labels | `src/make_dataset.py` | video + accepted ball track → training patches |
 | Training | `src/train.py` | patches → ball detector weights |

@@ -18,10 +18,11 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - Use the v0.3 ball tracks (`work/mN/final_v03/ball_track.json`): v0.2 tracks contained logo letters and spare balls, which would become false labels.
 - Re-check the contact sheet of labels per match, then train (`src/train.py`, start from `ball_v02.pt`), evaluate on the held-out last 20% of each match, add rows to `results.md`.
 
-### 3a. Highlights: recognise goals (F13)
-- **Problem:** the danger score ranks the match 3 goal (0.50) below three non-goal clips; 64–98 s of clips per 4 minutes would be ~25–35 minutes for a 90-minute match.
-- **Ideas:** detect the kickoff after a goal (all players back in their own halves, ball still at the centre spot for several seconds) and mark the preceding goal-area episode as a goal; celebration (attacking team clustered and slow); ball speed towards the goal (shot).
-- **From the review of the first reels:** add a short separator or a time label between clips (ffmpeg here has no `drawtext`; draw with OpenCV); tighter zoom on the goal action inside highlight clips (the main video stays wide); the "players only" trigger alone gives most weak clips, yet the match 3 chance at 1:25 had no ball detected, so it cannot simply be dropped.
+### 3a. Highlights: next steps (F13)
+- **Done 2026-10-11:** goals recognised by the following kickoff (both test goals, no false ones); time label and fade between clips.
+- **Problem:** the kickoff threshold rests on 2 goals with a small margin (0.80 vs 0.74); non-goal clips are still ~1 minute per 4 minutes, ~25 minutes for a 90-minute match; a goal in the last ~30 s of a video has no kickoff to confirm it.
+- **Ideas:** confirm the kickoff with a still ball at the centre spot; celebration (attacking team clustered, slow); ball speed towards the goal (shot); a "top N" mode for long matches.
+- **From the review of the first reels:** tighter zoom on the goal action inside highlight clips (the main video stays wide); the "players only" trigger alone gives most weak clips, yet the match 3 chance at 1:25 had no ball detected, so it cannot simply be dropped.
 - **Done when:** every goal in the checklists is labelled as a goal and ranked above all non-goal clips; a "top N" reel of a 90-minute match is ≤ 3 minutes.
 
 ### 3. Goal-area framing: remaining issues

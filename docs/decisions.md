@@ -49,4 +49,5 @@ Context for anyone (or any AI chat) picking up the project. Append new decisions
 | 2026-10-11 | Virtual camera v0.3: ball and goals as hard constraints, goal-area mode triggered by the ball or by an attack | Shots and goals must never leave the frame; accepted cost: players in frame fell from 64–71% to 56–63% |
 | 2026-10-11 | Drop ball detections that match the static background (`ball_bgdiff.py`) | Owner spotted a logo letter on the grass counted as the ball |
 | 2026-10-11 | Run the pipeline on the owner's M1 Mac with the Apple GPU (MPS) instead of the cloud sandbox | Detection about 3–4× faster; no upload limits for videos |
+| 2026-10-11 | Recognise goals by the kickoff that follows them (teams by jersey colour, each team in its own half) | Own computation on data we already have; reliable signal on both test goals, while ball-based signals miss goals when the ball is not detected |
 | 2026-10-11 | Ball detector: keep YOLO for now; whether "own computation only" also applies to it is an open experiment (backlog) | Owner wants to decide later; nothing changes until then |

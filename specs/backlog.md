@@ -6,10 +6,11 @@ Last updated: 2026-10-11 (session 2, docs synced)
 
 ## P0: now
 
-### 1. Goal checklist for matches 2 and 3
-- **Problem:** only two events are checked automatically (match 1 goal at 2:54.8, match 2 chance at 3:38, match 3 chance at 1:25 and goal at 2:04.7); the rest of matches 2 and 3 is not reviewed, so a regression there would go unnoticed.
-- **Ideas:** ask the owner; otherwise scan zoomed goal areas around the attack episodes found from player counts near each goal (match 2: left 2:03–3:53, right 0:04–1:09; match 3: many).
-- **Done when:** `specs/checklists/match2.json` and `match3.json` list every goal and shot on target, and `check_goals.py` passes on v0.3.
+### 1. Goal checklist: keep growing it
+- **State:** 7 events (match 1: goal 2:54.8; match 2: chance 3:38 + 3 attacks found by Claude; match 3: chance 1:25, goal 2:04.7). v0.3 passes 7/7, v0.2 3/7.
+- **Limit:** Claude's scan covered only zoomed goal areas inside the highlight clips; at 5–8 px the ball is often not visible on those frames, so shots outside the clips (and in match 3, where nothing extra could be confirmed) may be missing.
+- **Next:** add every moment the owner reports; on the owner's phone footage, list goals and shots while watching once.
+- **Done when:** every goal and shot the owner knows of is listed and passes.
 
 ### 2. Finish model v0.3 on three matches
 - Depends on the ball-detector experiment (item 5). The dataset and pseudo-labels are needed either way; training stays on YOLO until the owner decides.
@@ -35,6 +36,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
    - **Options:** (a) keep YOLO for the prototype, replace before any closed release; (b) an Apache-2.0 model (RF-DETR, D-FINE, YOLOX); (c) our own small network: architecture in our code on PyTorch (BSD), trained from scratch on our pseudo-labels (`make_dataset.py`) — fully owned, no third-party weights.
    - **Experiment for (c):** a tiny detector or heatmap network on 320 px patches, trained on the 3 matches; compare raw recall and precision with YOLO on held-out minutes (same table as `results.md`).
    - **Decides:** whether model v0.3 (item 2) is trained further on YOLO or on our own network.
+5a. **Processing speed** (requirement: a 90-minute match in ≤ 30 min). Measured on the M1 Mac, match 1 (4:00, step 5): detection 10.2 min, ball window 2 models 6.9 min, background check 1.1 min, render ~5 min → ~23 min per 4 minutes, ~8.5 hours per 90 minutes (17× over). Ideas: sample every 10th–15th frame and measure the quality loss; detect players once on a downscaled frame instead of three 1280 px tiles; one ball model; hardware encoding (VideoToolbox). Done when: a speed/quality table in `results.md` and a mode with 4 minutes processed in ≤ 1.5 min with the checklists still passing.
 6. **Ground truth:** golden clips with manual ball positions every 10 frames, so `ball_found_share` can be replaced by true recall.
 
 ## P2: later

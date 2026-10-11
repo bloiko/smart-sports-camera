@@ -1,6 +1,6 @@
 {
   "video": "132877.mp4",
-  "note": "Goal mouths measured by hand on the frame at 0:30, panorama pixels [x0, y0, x1, y1]. Events reported by the owner; the rest of the video not yet reviewed.",
+  "note": "Goal mouths measured by hand on the frame at 0:30, panorama pixels [x0, y0, x1, y1]. Events: owner reports plus attacks Claude found by scanning zoomed goal areas inside the highlight clips (2026-10-11); the rest of the video is not reviewed frame by frame.",
   "goals": {
     "left": [
       763,
@@ -26,6 +26,24 @@
     ]
   },
   "events": [
+    {
+      "time": "0:13.5",
+      "goal": "right",
+      "type": "attack",
+      "note": "Ball rolls into the penalty area, keeper collects (found by Claude on zoomed frames)"
+    },
+    {
+      "time": "1:02.3",
+      "goal": "right",
+      "type": "attack",
+      "note": "Blue player dribbles into the penalty area towards goal (found by Claude on zoomed frames)"
+    },
+    {
+      "time": "2:59.0",
+      "goal": "left",
+      "type": "attack",
+      "note": "Scramble at the edge of the penalty area (found by Claude on zoomed frames)"
+    },
     {
       "time": "3:38.0",
       "goal": "left",

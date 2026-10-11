@@ -50,6 +50,8 @@ Clips = goal-area episodes of v0.3, each from 8 s before the first dangerous mom
 | 2 | 6 | 76 s | 1 of 1 (chance 3:38) |
 | 3 | 7 | 98 s | 2 of 2 (chance 1:25, goal 2:04.7) |
 
+With the 3 attacks added to match 2 later: 7 of 7 checklist events are inside a highlight clip.
+
 The danger score does not single out goals yet: the match 3 goal scores 0.50, below three non-goal clips. Clip windows were tuned on these 4 events (first version cut the match 1 goal at the clip start because the peak was the celebration, the second dropped the match 3 chance).
 
 ## Automatic goal finding (`src/goals.py`)
@@ -83,6 +85,8 @@ Error of the automatic goal position against hand-measured goal mouths (`specs/c
 
 ## Goal checklist
 
+**Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**
+
 Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measured by hand + events); `src/check_goals.py` checks them. Matches 2 and 3 have one event each from the owner.
 
 | Match | Goal / shot (time) | Visible in output? | Version |
@@ -91,4 +95,5 @@ Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measu
 | 1 | Goal at 2:54.8, left goal | **Yes**: goal mouth in frame 100% of 2:52.8–2:55.8 (automatic goals) | v0.3 |
 | 3 | Goal at 2:04.7, right goal (owner: 2:05 ± 10 s; time found on frames) | **No** in v0.2: goal mouth fully in frame 36% of 2:02.7–2:05.7. **Yes** in v0.3: 100% | v0.2, v0.3 |
 | 3 | Chance at 1:25, left goal, no goal (owner) | **No** in v0.2: goal mouth fully in frame only 28% of 1:23–1:26, cut by the left edge. **Yes** in v0.3: 100%, keeper and attack visible | v0.2, v0.3 |
+| 2 | Attacks at 0:13.5 (right), 1:02.3 (right), 2:59.0 (left), found by Claude on zoomed goal areas | v0.2: 2 of 3 (1:02.3 fails, mouth in frame 33%). v0.3: 3 of 3 | v0.2, v0.3 |
 | 2 | Chance at 3:38, left goal, no goal (owner) | **Yes** in both, but in v0.2 the goal is a tiny corner of the frame and a third of the frame is the logo on the near grass; v0.3 shows goal, keeper and players large (frames compared 3:35–3:41) | v0.2, v0.3 |

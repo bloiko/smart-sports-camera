@@ -44,3 +44,9 @@ Context for anyone (or any AI chat) picking up the project. Append new decisions
 | 2026-10-10 | Combine several ball models (`merge_balls.py`) | Models fail in different places; the union beat each model alone |
 | 2026-10-11 | Make the pipeline stadium-independent (adaptive field mask, auto depth, crop inside image content) | Match 3 had a different stadium, resolution and light |
 | 2026-10-11 | Repository documentation: stable docs in `docs/`, changing state in `specs/`, all in English | Reuse across chats and tools |
+| 2026-10-11 | No manual steps for the user: goals (and later the pitch) are found automatically; a "tap both goals" setup screen was rejected | Owner: the user should not do anything by hand |
+| 2026-10-11 | Goal finding by own computation (tips of the play area from player positions); open-vocabulary detectors (OWLv2, Grounding DINO) rejected | Owner does not want third-party models or services with their own licences; the player-based method found all 6 test goals within ~60–80 px |
+| 2026-10-11 | Virtual camera v0.3: ball and goals as hard constraints, goal-area mode triggered by the ball or by an attack | Shots and goals must never leave the frame; accepted cost: players in frame fell from 64–71% to 56–63% |
+| 2026-10-11 | Drop ball detections that match the static background (`ball_bgdiff.py`) | Owner spotted a logo letter on the grass counted as the ball |
+| 2026-10-11 | Run the pipeline on the owner's M1 Mac with the Apple GPU (MPS) instead of the cloud sandbox | Detection about 3–4× faster; no upload limits for videos |
+| 2026-10-11 | Ball detector: keep YOLO for now; whether "own computation only" also applies to it is an open experiment (backlog) | Owner wants to decide later; nothing changes until then |

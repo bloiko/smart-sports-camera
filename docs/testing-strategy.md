@@ -13,12 +13,17 @@ Three levels: automatic metrics on reference videos (every change), technical te
   - `crop_w_min`, `crop_w_max`: zoom range.
 - Model evaluation always uses the **last 20% of each video**, which is never used for training, plus **at least one video the model has never seen**. A model trained and tested on one match is not evidence of anything.
 - Record results per version and per match in `specs/results.md`. A change that makes a metric worse is not merged without a reason written down.
+- Compare camera versions on identical inputs (the same `detections.jsonl` and ball files); otherwise detection changes hide the camera changes. Use `follow.py --no-render` for metrics and `--range A-B` to render only the moments that matter.
 
 ### Known limits of these metrics
 
 - `ball_found_share` counts accepted detections, not ground truth. Check precision by eye on a contact sheet of random accepted detections (e.g. 12 crops); report it as "N of 12 correct".
 - `ball_in_crop_share` is only measured on frames where the ball was found, so it can be high while the camera still misses play.
-- No metric captures "a goal was missed". Keep a **goal checklist**: list every goal and shot on target in the test videos with timestamps, and check each one in the rendered output.
+- No metric captures "a goal was missed". Keep a **goal checklist**: list every goal, shot on target and dangerous chance in the test videos with timestamps, and check each one in the rendered output.
+  - The checklist is machine-readable: `specs/checklists/matchN.json` holds the hand-measured goal mouths and the events; `src/check_goals.py` reports the share of frames (2 s before to 1 s after each event) with the goal mouth fully in the crop, PASS at ≥ 90%.
+  - Every moment the owner reports ("the ball was close to the goal at 3:38") goes into the checklist, so it is checked on every later version.
+- "Goal mouth in frame" can pass while the goal is a tiny corner of the frame. For every checklist event, also compare frames of the old and new version side by side (`src/compare_crops.py`).
+- Precision: `src/ball_sheet.py` makes a contact sheet of 24 random accepted balls; `--minus` shows what one version accepts and the other rejects.
 
 ## 2. Technical tests (every release)
 

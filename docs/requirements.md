@@ -42,7 +42,7 @@ The phone sets the hardest limits: battery, heat and mobile data. Numbers are st
 | Cost | Cloud cost per match known and below the subscription price |
 | Security | Videos private by default; access by link or from the account |
 | Privacy | People on video, including children: consent, deletion on request, EU storage (GDPR) |
-| Usability | ≤ 1 minute from opening the app to recording, no settings |
+| Usability | ≤ 1 minute from opening the app to recording, no settings, no manual marking (goals and pitch are found automatically) |
 | Devices | Start: iPhone 15 and newer; then iPhone 12+ and mid-range Android with ultra-wide 4K |
 | Licensing | Every model and dataset used in the product must allow commercial closed-source use |
 

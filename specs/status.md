@@ -2,7 +2,7 @@
 
 Living document: update it at the end of every work session (see `.claude/skills/project-docs/SKILL.md`). The stable plan for each phase is in `../docs/phases.md`.
 
-Last updated: 2026-10-11 (session 2)
+Last updated: 2026-10-11 (session 2, docs synced)
 
 | Phase | Status |
 | --- | --- |

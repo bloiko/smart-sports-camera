@@ -16,7 +16,10 @@ Follow `.claude/skills/project-docs/SKILL.md`: update `specs/` (status, results,
 
 - Test every model change on a match it has never seen and on the held-out last 20% of each video.
 - Look at the output, not just metrics: contact sheets of detections and labels, frames from rendered videos.
-- Long steps must be resumable (append output, restart from the last frame): commands are killed after ~10 minutes and the sandbox can restart.
+- Long steps must be resumable (append output, restart from the last frame): commands can be killed after ~10 minutes and sessions can restart.
 - Never commit videos or intermediate data; `.gitignore` covers them.
 - Ultralytics YOLO is AGPL; plan for an Apache-2.0 detector before any closed release.
-- Shots and goals must never leave the frame; check the goal checklist in `specs/results.md`.
+- Shots and goals must never leave the frame: run `src/check_goals.py` on every checklist in `specs/checklists/` and compare frames of old and new versions with `src/compare_crops.py`. Add every moment the owner reports to the checklist.
+- Owner's product rules: the user never marks anything by hand (find it automatically); prefer our own computation over third-party models or services with their own licences.
+- Compare camera versions on identical inputs; use `follow.py --no-render` for metrics and `--range` for quick renders.
+- The pipeline runs on the owner's M1 Mac (MPS); videos are in `~/Downloads`, working data in `work/mN/` (git-ignored).

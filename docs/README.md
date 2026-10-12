@@ -12,6 +12,7 @@ Documents here change rarely. Current state, numbers and to-do lists live in [`.
 | [risks.md](risks.md) | Technical, product, market, legal, financial and personal risks |
 | [business-plan.md](business-plan.md) | Market, competitors, pricing hypotheses, costs, channels, metrics |
 | [decisions.md](decisions.md) | Owner profile, kick-off answers, decision log |
+| [app-design.md](app-design.md) | iOS app: screens, principles, phone placement, working name |
 | [youtube-live.md](youtube-live.md) | Streaming a test video to YouTube from the Mac: Google Cloud setup, `golive.py`, what the app will do |
 | [research/](research/README.md) | October 2026 research with sources |
 

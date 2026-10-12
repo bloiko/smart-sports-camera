@@ -142,6 +142,14 @@ Last updated: 2026-10-11 (session 2, docs synced)
 
 ---
 
+## Phase 3: iOS app (started 2026-10-12)
+
+**Status:** skeleton in `ios/` (4K ultra-wide chunked recording, setup/live screen, YouTube Live API call); not compiled yet, the owner installs Xcode. Design mockup of all 10 screens: `docs/app-design.md`.
+
+**To do:** Google Sign-In, HaishinKit RTMPS, Core ML virtual camera, position check, viewer view, highlights on the phone.
+
+---
+
 ## Phases 3–6
 
 **Status:** not started. Next planned: phase 3 iOS app skeleton (4K ultra-wide recording in chunks) in parallel with phase 2.

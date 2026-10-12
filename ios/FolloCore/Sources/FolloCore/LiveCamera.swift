@@ -8,7 +8,8 @@ public final class LiveCamera {
     struct State { var pc: Pt; var spread: Double; var zn: [Int]; var base: [Double]; var goals: [Pt]? }
     typealias Target = (x: Double, y: Double, cw: Double, gw: Double, gi: Int)
 
-    let W: Double, H: Double, fps: Double, fmd: Mask, top: [Double], bot: [Double], C: CameraConfig
+    public let W: Double, H: Double, fps: Double
+    let fmd: Mask, top: [Double], bot: [Double], C: CameraConfig
     let B: Int, win: Int, fut: Int, sig: Double, P: Int
     let lg: LiveGoals
     var G: [Pt]? = nil; var nextG: Double
@@ -24,6 +25,7 @@ public final class LiveCamera {
     public internal(set) var frames: [Frame] = []
     public private(set) var goalsFirstS: Double? = nil
     var pushed = -1
+    var PF: [(f: Int, pl: [Pt])] = []          // field players of every player frame: zone counts for highlights after Stop
     /// Called for every emitted frame (index, frame).
     public var onFrame: ((Int, Frame) -> Void)?
 
@@ -56,7 +58,7 @@ public final class LiveCamera {
         if f % Int(fps) == 0 && rows <= 400 && ys.count > 50 { depth = [Stats.percentile(ys, 2), Stats.percentile(ys, 98)] }
         goalsAt.append(G)
         if let ps = rec.persons {
-            let pl = fieldPlayers(ps)
+            let pl = fieldPlayers(ps); PF.append((f, pl))
             if !pl.isEmpty {
                 let mx = Stats.percentile(pl.map { $0.x }, 50), my = Stats.percentile(pl.map { $0.y }, 50)
                 let w = pl.map { 1 / (1 + pow(Stats.hypot($0.x - mx, $0.y - my) / C.focusPx, 2)) }; let sw = w.reduce(0, +)
@@ -164,5 +166,17 @@ public final class LiveCamera {
         if !on { return (gw > 0.5, 0) }
         let l = gw <= 0.25 ? low + 1 : 0
         return (Double(l) < C.goalHoldS * fps, l)
+    }
+}
+
+extension LiveCamera {
+    /// For highlights after Stop (as follow.py's S_FRAMES / ZN / ZONE_BASE): players in each goal zone per player
+    /// frame with the final goals, and the usual count (median).
+    public func zoneCounts() -> (frames: [Int], zn: [[Int]], base: [Double]) {
+        guard let g = G else { return ([], [], [0, 0]) }
+        let D = Stats.hypot(g[1].x - g[0].x, g[1].y - g[0].y)
+        let zn = PF.map { pf in (0..<2).map { k in pf.pl.filter { Stats.hypot($0.x - g[k].x, $0.y - g[k].y) < C.goalZone[1] * D }.count } }
+        let base = (0..<2).map { k in zn.isEmpty ? 0.0 : Stats.percentile(zn.map { Double($0[k]) }, 50) }
+        return (PF.map { $0.f }, zn, base)
     }
 }

@@ -47,7 +47,12 @@ final class LiveCameraRunner {
         frame = 0; ring = [:]; ballPasses = 0; ballFound = 0
     }
 
-    func stop() { pipe = nil; cam = nil; ring = [:] }
+    /// Після Стоп: траєкторія і кольори форми для хайлайтів (HighlightsRunner), потім звільнити пам'ять.
+    func stop() -> (cam: LiveCamera, jerseys: [JerseySample])? {
+        defer { pipe = nil; cam = nil; ring = [:] }
+        guard let cam = cam, let pipe = pipe else { return nil }
+        cam.finish(); return (cam, pipe.jerseys)
+    }
 
     /// Thermal step (item 4): detect every 3rd frame instead of every 2nd when hot.
     func setDetectEvery(_ n: Int) { pipe?.ballEvery = n; pipe?.playerEvery = 2 * n }
@@ -58,7 +63,7 @@ final class LiveCameraRunner {
         let t = CMSampleBufferGetPresentationTimeStamp(sb)
         let f = frame; frame += 1
         if let copy = copyFrame(pb) { ring[f] = (copy, t) }
-        let rec = pipe.process(frame: f, image: CIImage(cvPixelBuffer: pb), grey: { Image8.grey(from: pb) })
+        let rec = pipe.process(frame: f, image: CIImage(cvPixelBuffer: pb), grey: { Image8.grey(from: pb) }, patch: { Image8.bgrPatch(pb, x0: $0, y0: $1, w: $2, h: $3) })
         if rec.rois != nil { ballPasses += 1; if rec.ball != nil { ballFound += 1 } }
         cam.push(rec)
     }

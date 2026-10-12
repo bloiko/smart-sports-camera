@@ -10,7 +10,8 @@ public final class BallTracker {
         public init() {}
     }
     public let P: Params
-    let W: Double, H: Double, fps: Double, fm: Mask, fmd: Mask
+    let W: Double, H: Double, fps: Double, fm: Mask
+    public let fmd: Mask
     var ball: Pt? = nil; var ballV = Pt(0, 0); var ballF = -1_000_000_000
     var centre: Pt; var scan = 0; var hot: [Pt] = []; var feet: [Pt] = []
     var black: [Pt] = []; var lastPs: [Box] = []

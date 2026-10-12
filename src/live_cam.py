@@ -57,6 +57,7 @@ class LiveCamera:
         self.X, self.Y, self.CW, self.CH, self.GON, self.GIo, self.BX, self.BY = [], [], [], [], [], [], [], []
         self.ysm, self.zsm, self.msm = Causal(int(0.2 * fps)), Causal(int(0.6 * fps)), Causal(int(0.5 * fps))
         self.goals_first = None; self.pushed = -1
+        self.PF = []           # (frame, field players) of every player frame: zone counts for highlights after Stop
 
     # ---------------------------------------------------------------- input
     def field_players(self, ps):
@@ -83,7 +84,7 @@ class LiveCamera:
             self.depth = [percentile(self.ys, 2), percentile(self.ys, 98)]
         self.goals_at.append(self.G)
         if 'persons' in rec:
-            pl = self.field_players(rec['persons'])
+            pl = self.field_players(rec['persons']); self.PF.append((f, pl))
             if pl:
                 mx, my = percentile([p[0] for p in pl], 50), percentile([p[1] for p in pl], 50)
                 w = [1 / (1 + (math.hypot(p[0] - mx, p[1] - my) / C['focus_px']) ** 2) for p in pl]; sw = sum(w)
@@ -262,6 +263,10 @@ class LiveCamera:
             self.gon_on, self.gon_low = self.hyst(self.gon_on, self.gon_low, gw); self.GONf.append(self.gon_on)
         for o in range(len(self.X), h + 1): self.emit(o, h)
         G = self.G if self.G is not None else [(math.nan, math.nan)] * 2
-        return dict(X=np.array(self.X), Y=np.array(self.Y), CW=np.array(self.CW), CH=np.array(self.CH), FPS=self.fps,
+        # for highlights.py (as follow.py): players in each goal zone per player frame, with the final goals
+        D = math.hypot(G[1][0] - G[0][0], G[1][1] - G[0][1]); S_FRAMES = [f for f, _ in self.PF]
+        ZN = [[sum(1 for p in pl if math.hypot(p[0] - G[k][0], p[1] - G[k][1]) < self.C['goal_zone'][1] * D) for k in range(2)] for _, pl in self.PF]
+        ZONE_BASE = [percentile([z[k] for z in ZN], 50) if ZN else 0 for k in range(2)]
+        return dict(S_FRAMES=np.array(S_FRAMES), ZN=np.array(ZN).reshape(-1, 2), ZONE_BASE=np.array(ZONE_BASE),X=np.array(self.X), Y=np.array(self.Y), CW=np.array(self.CW), CH=np.array(self.CH), FPS=self.fps,
                     GON=np.array(self.GON), GI=np.array(self.GIo), BX=np.array(self.BX), BY=np.array(self.BY), GOALS=np.array(G),
                     GOAL_DIST=float(math.hypot(G[1][0] - G[0][0], G[1][1] - G[0][1])), goals_first_s=float(self.goals_first if self.goals_first is not None else math.nan))

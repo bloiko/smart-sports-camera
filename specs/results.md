@@ -200,6 +200,19 @@ Core ML detection on the Mac (`follosim detect`, fp16 models, same tracker and c
 - An export with `half=False` gives byte-identical detections: Ultralytics 8.4 ignores `half` for Core ML (it warns to use `quantize`), so the models are whatever its default is; precision is not the cause of the differences.
 - Core ML speed on the M1 Mac is about 3× faster than Ultralytics on MPS (players 43–55 ms vs 134–223 ms per 2 tiles); the phone will be slower, to be measured.
 
+## Highlights from the live recording (2026-10-12, `src/live_highlights.py`, Swift port `ios/FolloCore/Highlights*.swift`)
+
+What the phone does after Stop: moments from the live camera path (goal-mode episodes, scored as in `highlights.py`), kick-offs by jersey colour from samples taken every 8th frame during the live (every 2nd player frame), the last episode before a kick-off = goal, clips 16:9 and 9:16 with the close-up camera, rendered on the phone (`ClipRenderer.swift`, AVAssetWriter + CoreImage; checked on the Mac).
+
+| Match | Kick-offs (Python / Swift) | Clips | Checklist events in a clip | Goal labelled |
+| --- | --- | --- | --- | --- |
+| 1 | 195.2 s (0.77) / 194.6 s (0.77) | 3, 55 s, identical in Swift | 1/1 | yes (both) |
+| 2 | none / none | 4, 63 s, identical | 3/4: the 0:13.5 attack is before the first goal estimate (30 s), so no goal-mode episode | — |
+| 3 | 148.2 s (0.77) / **131.2 s (0.78)** | 5, 82 s | 2/2 | Python: the real goal (2:04.7); Swift: a wrong earlier episode |
+
+- Jersey sampling density: every 20th frame missed the match 3 kick-off (peak 0.75), every 4th misses both (0.76–0.77); every 8th finds both at exactly the 0.77 threshold. The separation peaks of real kick-offs are 0.77–0.78 and the best false ones 0.69–0.75: **no margin**. Python and Swift differ by up to 0.1 in the separation curve (k-means on jersey colours starts at random; own Lab conversion), enough to flip the match 3 result. The kick-off criterion must become more robust before it labels goals on the phone (backlog 3c item 4).
+- Clip rendering: Swift and Python frames of the same clip compared visually (`work/m1/live_pre/clip_compare.jpg`); the Swift label is drawn with CoreImage text instead of OpenCV's Hershey font.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

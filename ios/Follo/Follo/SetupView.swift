@@ -21,6 +21,9 @@ struct SetupView: View {
     @State var lastTouch = Date()                                   // пункт 11
     @State var viewer = false                                       // пункт 10
     @State var showAdvice = !UserDefaults.standard.bool(forKey: "advice.shown")   // пункти 9, 14
+    @State var result: Bool = false                                 // екран результату після Стоп
+    @State var clips: [HighlightsRunner.Clip] = []
+    @State var hlProgress: String?
 
     var body: some View {
         ZStack {
@@ -63,6 +66,7 @@ struct SetupView: View {
         }
         .contentShape(Rectangle()).simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastTouch = Date() })
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
+        .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
         .onAppear {
             cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
             ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
@@ -102,7 +106,16 @@ struct SetupView: View {
     }
 
     func stop() {
-        cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil); ls.runner.stop()
+        cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil)
+        let live = ls.runner.stop(); let env = ls.runner.env
+        result = true; clips = []; hlProgress = "Готую хайлайти…"
+        // хайлайти з записаних файлів у фоні (≈ 1–2 хв): кікоф → гол, кліпи 16:9 і 9:16
+        DispatchQueue.global(qos: .userInitiated).async {
+            let chunks = ((try? FileManager.default.contentsOfDirectory(at: ChunkWriter.dir, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "mp4" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            var out: [HighlightsRunner.Clip] = []
+            if let (c, j) = live, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
+            DispatchQueue.main.async { clips = out; hlProgress = nil }
+        }
         if let l = live { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
         status = "Записано \(cam.chunkCount) файлів у Documents/chunks"
     }

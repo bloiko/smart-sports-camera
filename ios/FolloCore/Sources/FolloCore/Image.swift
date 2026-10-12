@@ -58,3 +58,28 @@ public struct Image8 {
         return out
     }
 }
+
+extension Image8 {
+    /// BGR copy of a rectangle of any pixel buffer (BGRA or 4:2:0 bi-planar from the camera), for jersey colours.
+    public static func bgrPatch(_ pb: CVPixelBuffer, x0: Int, y0: Int, w: Int, h: Int) -> Image8 {
+        CVPixelBufferLockBaseAddress(pb, .readOnly); defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let W = CVPixelBufferGetWidth(pb), H = CVPixelBufferGetHeight(pb)
+        let x0 = min(max(x0, 0), W - 1), y0 = min(max(y0, 0), H - 1), w = max(min(w, W - x0), 1), h = max(min(h, H - y0), 1)
+        var out = Image8(w: w, h: h, ch: 3)
+        if CVPixelBufferGetPlaneCount(pb) >= 2 {
+            let yb = CVPixelBufferGetBaseAddressOfPlane(pb, 0)!.assumingMemoryBound(to: UInt8.self), ybpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let cb = CVPixelBufferGetBaseAddressOfPlane(pb, 1)!.assumingMemoryBound(to: UInt8.self), cbpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let full = CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            for y in 0..<h { for x in 0..<w {
+                let Y = Double(yb[(y0 + y) * ybpr + x0 + x]), U = Double(cb[((y0 + y) / 2) * cbpr + ((x0 + x) / 2) * 2]) - 128, V = Double(cb[((y0 + y) / 2) * cbpr + ((x0 + x) / 2) * 2 + 1]) - 128
+                let yy = full ? Y : (Y - 16) * 255 / 219, k = full ? 1.0 : 255 / 224.0
+                let r = yy + 1.402 * V * k, g = yy - 0.344136 * U * k - 0.714136 * V * k, b = yy + 1.772 * U * k
+                let o = (y * w + x) * 3; out.data[o] = UInt8(min(max(b, 0), 255)); out.data[o + 1] = UInt8(min(max(g, 0), 255)); out.data[o + 2] = UInt8(min(max(r, 0), 255))
+            } }
+        } else {
+            let base = CVPixelBufferGetBaseAddress(pb)!.assumingMemoryBound(to: UInt8.self), bpr = CVPixelBufferGetBytesPerRow(pb)
+            for y in 0..<h { for x in 0..<w { let p = base + (y0 + y) * bpr + (x0 + x) * 4, o = (y * w + x) * 3; out.data[o] = p[0]; out.data[o + 1] = p[1]; out.data[o + 2] = p[2] } }
+        }
+        return out
+    }
+}

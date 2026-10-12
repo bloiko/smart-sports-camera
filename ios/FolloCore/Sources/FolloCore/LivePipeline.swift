@@ -13,6 +13,9 @@ public final class LivePipeline {
     public var playerConf = 0.12, ballConf = 0.1, bgMin = 15.0
     let fm: Mask
     public var timePlayers = 0.0, timeBall = 0.0, ballCalls = 0
+    public var fmd: Mask { tracker.fmd }
+    /// Jersey colours sampled on every 2nd player frame (for the kick-off search after Stop).
+    public private(set) var jerseys: [JerseySample] = []
 
     public init(W: Int, H: Int, fps: Double, fm: Mask, fmd: Mask, players: Detector, ball: Detector) {
         self.W = W; self.H = H; self.fps = fps; self.fm = fm; self.players = players; self.ball = ball
@@ -20,7 +23,7 @@ public final class LivePipeline {
     }
 
     /// `grey`: full-size grey image of the frame (Y plane on the phone), only read when needed.
-    public func process(frame f: Int, image: CIImage, grey: () -> Image8) -> FrameRecord {
+    public func process(frame f: Int, image: CIImage, grey: () -> Image8, patch: ((Int, Int, Int, Int) -> Image8)? = nil) -> FrameRecord {
         var rec = FrameRecord(frame: f); var g: Image8? = nil
         func greyImg() -> Image8 { if g == nil { g = grey() }; return g! }
         if Double(f) / fps - bg.lastT >= bg.everyS { bg.push(grey: greyImg(), time: Double(f) / fps) }
@@ -38,6 +41,7 @@ public final class LivePipeline {
             }
             rec.persons = ps; if !hints.isEmpty { rec.hints = hints }
             tracker.playersSeen(ps); for h in hints { tracker.addHint(h, frame: f) }
+            if f % Jersey.every == 0, let patch = patch { jerseys += Jersey.samples(frame: f, persons: ps, fmd: fmd, patch: patch) }
             timePlayers += Date().timeIntervalSince(t)
         }
         if f % ballEvery == 0 {

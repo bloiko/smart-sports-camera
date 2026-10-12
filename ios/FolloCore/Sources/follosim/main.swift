@@ -6,6 +6,7 @@ import FolloCore
 //   follosim camera DIR B        DIR = work/mN/live (live_det.jsonl + env.json + fmd.png from `live_sim.py --dump`) → DIR/swift_B{B}.json
 //   follosim env VIDEO DIR       field mask, content bounds, halfway line from the first 10 s → DIR/swift_env.json + swift_fm.png (compare with env.json)
 //   follosim detect VIDEO DIR [--models models/coreml]   Core ML detection + tracker on the whole video → DIR/swift_det.jsonl (+ swift_env.json); then `follosim camera DIR B --swift`
+//   follosim highlights DIR VIDEO [--swift] [--no-render]   highlights after Stop from the live path: kick-offs by jersey colour, clips 16:9 + 9:16 → DIR/swift_highlights/
 //   follosim track DIR           replay the Python ball candidates through the Swift tracker: ROIs and accepted balls must match
 setvbuf(stdout, nil, _IOLBF, 0)
 let args = CommandLine.arguments
@@ -72,5 +73,39 @@ case "env", "detect":
     let n = Double(f)
     print("detection: \(Int(Date().timeIntervalSince(t1))) s for \(f) frames; players pass \(Int(pipe.timePlayers / (n / Double(pipe.playerEvery)) * 1000)) ms every \(pipe.playerEvery) frames, ball ROI \(Int(pipe.timeBall / Double(max(pipe.ballCalls, 1)) * 1000)) ms × \((Double(pipe.ballCalls) / (n / Double(pipe.ballEvery))).formatted(.number.precision(.fractionLength(2)))) per pass every \(pipe.ballEvery) frames (Core ML on this Mac)")
     print("live ball found on \((Double(found) / Double(max(passes, 1)) * 100).formatted(.number.precision(.fractionLength(1))))% of ball passes → \(dir)/swift_det.jsonl")
+case "highlights":
+    guard args.count >= 4 else { die("usage: follosim highlights DIR VIDEO [--swift] [--no-render]") }
+    let dir = args[2], video = args[3], swift = args.contains("--swift"); let prefix = swift ? "swift_" : ""
+    let env = try! LiveEnv.load(dir: dir, prefix: prefix)
+    let cam = LiveCamera(W: env.W, H: env.H, fps: env.fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: 2)
+    var persons: [Int: [Box]] = [:]
+    for line in try! String(contentsOfFile: dir + (swift ? "/swift_det.jsonl" : "/live_det.jsonl")).split(separator: "\n") {
+        if let r = FrameRecord(jsonLine: String(line)) { cam.push(r); if let p = r.persons, r.frame % Jersey.every == 0 { persons[r.frame] = p } }
+    }
+    cam.finish()
+    guard let goals = cam.goals else { die("no goals found") }
+    // jersey colours from the video at the sampled frames (the phone does this during the live)
+    let reader = try! VideoReader(path: video); try! reader.start(); var F: [JerseySample] = []; var f = 0; let last = persons.keys.max() ?? 0
+    while f <= last { let more: Bool = autoreleasepool { guard let pb = reader.next() else { return false }; if let ps = persons[f] { F += Jersey.samples(frame: f, img: Image8(bgra: pb), persons: ps, fmd: env.fmd) }; f += 1; return true }; if !more { break } }
+    let (T, S) = Kickoff.separation(F, centreX: (goals[0].x + goals[1].x) / 2, fps: env.fps); let kicks = Kickoff.find(T, S)
+    print("separation max \((S.max() ?? 0).formatted(.number.precision(.fractionLength(2)))) at \(S.isEmpty ? 0 : T[S.indices.max(by: { S[$0] < S[$1] })!]) s; kickoffs \(kicks)")
+    let zc = cam.zoneCounts(); var ms = Highlights.moments(cam.frames, fps: env.fps, goals: goals, sFrames: zc.frames, zn: zc.zn, base: zc.base)
+    Highlights.markGoals(&ms, kickoffs: kicks); ms = ms.filter { $0.score >= Highlights.minScore }
+    let hd = dir + (swift ? "/swiftdet_highlights" : "/swift_highlights"); try! FileManager.default.createDirectory(atPath: hd + "/vertical", withIntermediateDirectories: true)
+    let paths = [ClosePath.make(cam.frames, fps: env.fps, W: env.W, H: env.H, top: env.top, bot: env.bot, goals: goals), ClosePath.make(cam.frames, fps: env.fps, W: env.W, H: env.H, top: env.top, bot: env.bot, goals: goals, vertical: true)]
+    let rend = ClipRenderer(); var report: [[String: Any]] = []
+    for (k, var m) in ms.enumerated() {
+        let name = String(format: "clip_%02d_%dm%02ds.mp4", k + 1, Int(m.peak) / 60, Int(m.peak) % 60); m.file = name
+        if !args.contains("--no-render") {
+            try! rend.render(video: video, path: paths[0], out: URL(fileURLWithPath: hd + "/" + name), t0: m.start, t1: m.end, size: (1920, 1080), label: m.label)
+            try! rend.render(video: video, path: paths[1], out: URL(fileURLWithPath: hd + "/vertical/" + name), t0: m.start, t1: m.end, size: (1080, 1920), label: m.label)
+        }
+        print(String(format: "%6.1f-%6.1fs  %@ %@ danger %.2f  %@", m.start, m.end, m.goal == 0 ? "left " : "right", m.kind, m.score, name))
+        report.append(["start": m.start, "end": m.end, "peak": m.peak, "goal": m.goal == 0 ? "left" : "right", "kind": m.kind, "ep_end": m.epEnd, "score": m.score, "ball": m.ball, "players": m.players, "file": name])
+    }
+    let rep: [String: Any] = ["kickoffs": kicks.map { [$0.0, $0.1] }, "separation": zip(T, S).map { [$0, $1] }, "clips": report,
+                              "jerseys": F.map { [Double($0.frame), $0.x, $0.a, $0.b] }]
+    try! JSONSerialization.data(withJSONObject: rep).write(to: URL(fileURLWithPath: hd + "/live_highlights.json"))
+    print("\(ms.count) clips → \(hd)")
 default: die("unknown command \(args[1])")
 }

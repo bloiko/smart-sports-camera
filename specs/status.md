@@ -158,12 +158,15 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 **Done 2026-10-12 (UI, edge-case items 9, 10, 11, 13, 14):** advice sheet before the first live (Do Not Disturb, Guided Access, power bank), call detection, viewer view of the real 1080p output, screen dimming after 10 s, stream over recording when storage is low. Code only.
 
-**To do:** backlog 3c items 3–5. Blocked on the owner: Xcode, first run, own footage.
+**Done 2026-10-12 (highlights after Stop):** `HighlightsRunner.swift` joins the 4K chunks, finds kick-offs from jersey colours sampled during the live, cuts goal-area episodes with the close-up camera into 16:9 and 9:16 clips (AVAssetWriter), `ResultView.swift` lists them with play and share. Checked on the Mac through `follosim highlights`: clips identical to the Python reference on matches 1 and 2; on match 3 the kick-off (and so the GOAL label) differs because the criterion has no margin (`results.md`).
+
+**To do:** backlog 3c items 4–5. Blocked on the owner: Xcode, first run, own footage.
 
 **Difficulties**
 - Swift on this Mac: the Command Line Tools 16.2 cannot build any Swift (stale `module.modulemap`; SwiftPM manifests do not link). `build_mac.sh` calls swiftc with a VFS overlay instead.
 - Core ML export failed with torch 2.14 (coremltools 9.0 bug): separate `.venv-export` with torch 2.7.
 - A Swift command-line loop without `autoreleasepool` leaked 1.5 MB per frame and was killed at 3000 frames (exit 137).
+- Swift traps (exit 133) print nothing in an optimised build: `OPT="-O -g" build_mac.sh` and `lldb --batch -o run -o bt` give the line.
 - Parity hunting: the batch simulator looked ahead further than the buffer in four places; the recorded ball hints were rounded while the computation used the unrounded ones (74 ROI mismatches until fixed); `numpy.argsort` is not stable by default.
 
 **Lessons learned**

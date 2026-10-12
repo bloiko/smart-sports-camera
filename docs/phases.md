@@ -9,7 +9,8 @@ At about 1 hour a day, phases 0–4 (≈ 4–6 months) produce an iOS app: "reco
 | 0. Test footage | 5–10 game recordings | 1–2 weeks | 0 (tripod ≈ $30–60) | Day and evening footage, 2+ pitches |
 | 1. Offline prototype | Script: video → video that follows play | 2–4 weeks | 0 | Ball in frame ≥ 80% of the time on reference clips |
 | 2. Tracking quality and own model | Apache-licensed ball detector trained on own footage | 4–8 weeks | 0 (Kaggle / Colab) | ≥ 90% in frame; every goal visible; 3 friends watch to the end |
-| 3. iOS app + cloud | App: record → upload → finished video | 8–12 weeks | $99/yr Apple + $0–5/mo | 3 full matches in a row with no manual steps |
+| 3. iOS app (Follo): record + live | App: 4K recording, virtual camera on the phone, live to YouTube, highlights | 12–16 weeks | $0 (free Apple ID sideload) | 3 full games streamed in a row with no manual step and no stream loss |
+| 3b. Cloud processing (optional, later) | Upload the wide recording → better full video and highlights | 5–8 weeks | $0–5/mo | 3 matches processed with no manual steps |
 | 4. Everyday use and beta | Owner + 5–10 friends via TestFlight | 4 weeks | ≈ $5/mo | Half of the testers record a game every week |
 | 5. YouTube live | 1080p live stream with the virtual camera | 8–12 weeks | ≈ 0 | 90 minutes live without shutdown, with a power bank |
 | 6. Android, full pitch, highlights | Second platform and new features | 3+ months | varies | Decision: hobby or business |
@@ -66,7 +67,21 @@ Testing: hold out the last 20% of every video for validation; measure ball recal
 
 Exit: ≥ 90% in frame on day footage, ≥ 75% in the evening; every goal visible; 2 of 3 friends say "I want this for our games".
 
-## Phase 3: iOS app, recording and cloud processing
+## Phase 3: iOS app (Follo): recording and live
+
+**Goal (updated 2026-10-12):** live is the main product line. One tap: the phone records the wide 4K video and streams the virtual-camera crop to YouTube; after the game it cuts highlights from the wide recording. Design: `app-design.md`. Edge cases and the feature checklist: `live-edge-cases.md`. Free sideload without the App Store: `../ios/README.md`.
+
+Functional: 4K 30 fps ultra-wide in 3-minute chunks; position check (whole pitch, both goals) before the Go live button appears; Core ML detection and the live camera with a 2 s buffer (validated in `src/live_sim.py`); RTMPS to YouTube via the Live API with Google sign-in; viewer view; thermal, battery and network steps; reconnect to the same broadcast; highlights on the phone.
+
+Non-functional: ≤ 1 minute from opening the app to live; 90 minutes without a stream loss with a power bank; the stream never stops because of a warning; private (unlisted) by default; app runs 7 days per free sideload.
+
+Testing: the live simulator checklists on recorded videos; failure drills (call during the live, airplane mode for 30 s, Home button, low battery); field tests in sun and in the evening with a temperature log every 5 minutes.
+
+Exit: 3 full games streamed in a row with no manual step and no stream loss.
+
+## Phase 3b: cloud processing (later, optional)
+
+The old phase 3 plan, kept for the premium path: upload the wide recording, process in the cloud, better highlights and full video.
 
 **Goal:** take the Mac out of the loop. Place the phone, press "Record", get a link after the game.
 

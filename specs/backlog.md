@@ -36,6 +36,9 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - Live ball search for evening / pale grass (match 3 ball in crop 74%): ball candidates from player motion, a second ball model pass when lost.
 - Goals in the first 30–60 s: done partly (mirror through the halfway line). Open: an estimate before 30 s (halfway line + field mask ends?), and remembering goals of a pitch the owner plays on every week.
 
+### 3c. Phase 3 (Follo app): feature checklist
+See `docs/live-edge-cases.md` for the ordered checklist (21 items, status marks kept there). Next: 8 (RTMPS + Core ML), then 1–3 (reconnect, buffer, resume), 4–7, 9–12.
+
 ## P1: next
 
 4. **Own iPhone footage** (phase 0): 10–15 minutes, ultra-wide 0.5×, 4K 30 fps, tripod 2–3 m. Run the whole pipeline on it.

@@ -9,7 +9,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
 | 0. Test footage | Partially done: 3 public panoramic matches; no own iPhone footage yet |
 | 1. Offline prototype | Done (v0.1), with caveats |
 | 2. Tracking quality and own model | In progress (v0.3 camera done: goal-area framing; model v0.3 next) |
-| 3. iOS app + cloud | Not started |
+| 3. iOS app (Follo) | Started 2026-10-12: skeleton, design, edge-case checklist 1/21 partly done |
 | 4. Everyday use and beta | Not started |
 | 5. YouTube live | Started early: live simulator on the Mac (buffer 2 s passes all 7 checklist events) |
 | 6. Android, full pitch, highlights | Not started |
@@ -146,7 +146,7 @@ Last updated: 2026-10-11 (session 2, docs synced)
 
 **Status:** skeleton in `ios/` (4K ultra-wide chunked recording, setup/live screen, YouTube Live API call); not compiled yet, the owner installs Xcode. Design mockup of all 10 screens: `docs/app-design.md`.
 
-**To do:** Google Sign-In, HaishinKit RTMPS, Core ML virtual camera, position check, viewer view, highlights on the phone.
+**To do:** the 21-item checklist in `docs/live-edge-cases.md` (RTMPS + Core ML first, then reconnect/buffer/resume).
 
 ---
 

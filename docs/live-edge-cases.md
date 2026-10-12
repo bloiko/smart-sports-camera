@@ -56,20 +56,20 @@ Key fact: **iOS stops the camera as soon as the app leaves the screen.** Most ca
 Status: ☐ not started, ◐ in progress, ☑ done.
 
 **Critical**
-- ☐ 8. RTMPS streaming (HaishinKit) and Core ML virtual camera on the phone
-- ◐ 1. Reconnect to the same broadcast after a call, network loss or crash
-- ◐ 2. Frame buffer up to 60 s during a network drop
-- ☐ 3. "Resume the live?" after a crash or reboot
-- ☐ 4. Thermal steps (25 fps → bitrate → sparser detection)
-- ☐ 5. Adaptive bitrate 4.5 → 3 → 2 Mbit/s
-- ☐ 6. Battery warnings at 20/10%, clean end at 5%
-- ☐ 7. Pre-start checks: storage, channel live rights, Google token, mobile data
+- ◐ 8. RTMPS streaming (HaishinKit, code) and Core ML (not started) virtual camera on the phone
+- ☑ 1. Reconnect (code in `Streamer.swift`, untested on a phone) to the same broadcast after a call, network loss or crash
+- ☑ 2. Frame buffer (code, untested) up to 60 s during a network drop
+- ☑ 3. "Resume the live?" (code, untested) after a crash or reboot
+- ◐ 4. Thermal steps (fps and bitrate; sparser detection waits for Core ML) (25 fps → bitrate → sparser detection)
+- ☑ 5. Adaptive bitrate (code, untested) 4.5 → 3 → 2 Mbit/s
+- ☑ 6. Battery warnings (code, untested) at 20/10%, clean end at 5%
+- ◐ 7. Pre-start checks (storage, battery, heat; YouTube rights and token pending): storage, channel live rights, Google token, mobile data
 
 **Important**
 - ☐ 9. Do Not Disturb request before Go live
 - ☐ 10. Viewer view in the app; hint before leaving
 - ☑ 11. Screen dims after 10 s, touch restores (auto-lock off done; dimming pending)
-- ☐ 12. Hold 1 s to stop
+- ☑ 12. Hold 1 s to stop
 - ☐ 13. Stream over recording when storage is low
 - ☐ 14. Guided Access advice in onboarding
 

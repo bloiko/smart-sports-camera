@@ -2,7 +2,11 @@
 
 What it does today: 4K 30 fps from the ultra-wide camera, recorded in 3-minute HEVC chunks to `Documents/chunks/`, a setup/live screen with thermal state and chunk count, a "Go live" button that creates a YouTube broadcast through the Live API (token needed) and starts recording. Not yet: on-device virtual camera (Core ML), RTMPS streaming (HaishinKit), Google Sign-In. Design mockup: see the artifact linked in `specs/status.md`.
 
-## Run on your own iPhone for free (no App Store, no paid account)
+## Run on your own iPhone
+
+See `docs/run-on-iphone.md`.
+
+## Old notes
 
 1. Install **Xcode** from the Mac App Store (free, ~12 GB). Open it once and let it install iOS components.
 2. Xcode → Settings → Accounts → **+** → sign in with your Apple ID (a normal one; the free "Personal Team" is enough).

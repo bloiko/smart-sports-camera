@@ -13,6 +13,7 @@ Documents here change rarely. Current state, numbers and to-do lists live in [`.
 | [business-plan.md](business-plan.md) | Market, competitors, pricing hypotheses, costs, channels, metrics |
 | [decisions.md](decisions.md) | Owner profile, kick-off answers, decision log |
 | [app-design.md](app-design.md) | iOS app: screens, principles, phone placement, working name |
+| [run-on-iphone.md](run-on-iphone.md) | Build and run the app on your own iPhone with a free Apple ID |
 | [live-edge-cases.md](live-edge-cases.md) | What can go wrong during a live stream and how the app handles it; phase 3 feature checklist with status |
 | [youtube-live.md](youtube-live.md) | Streaming a test video to YouTube from the Mac: Google Cloud setup, `golive.py`, what the app will do |
 | [research/](research/README.md) | October 2026 research with sources |

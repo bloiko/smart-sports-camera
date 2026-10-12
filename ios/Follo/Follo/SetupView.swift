@@ -51,7 +51,7 @@ struct SetupView: View {
             do {
                 // TODO: токен з Google Sign-In; поки що — з Info.plist ключ YT_TOKEN для тесту
                 let token = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""
-                if !token.isEmpty { live = try await YouTubeLive.createBroadcast(token: token, title: "PitchCam \(Date().formatted(date: .abbreviated, time: .shortened))") }
+                if !token.isEmpty { live = try await YouTubeLive.createBroadcast(token: token, title: "Follo \(Date().formatted(date: .abbreviated, time: .shortened))") }
                 else { status = "Без YouTube: лише запис (додай Google Sign-In)" }
                 cam.startRecording(); startedAt = Date()
                 // TODO: RTMPS через HaishinKit (live!.rtmpsURL, live!.streamKey) + віртуальна камера (Core ML)

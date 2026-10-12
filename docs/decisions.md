@@ -55,3 +55,4 @@ Context for anyone (or any AI chat) picking up the project. Append new decisions
 | 2026-10-11 | Live camera with a 2 s look-ahead buffer | Simulator on 3 matches: 2 s passes all 7 checklist events and is smooth; 0–1 s fail events; 3–5 s add nothing |
 | 2026-10-11 | Live goals: mirror the goal of a side play has not reached through the halfway line | Players alone cannot find a goal nobody stands near in the first minute; mirroring cut the early error from ~900 px to 54–125 px in 2 of 3 matches |
 | 2026-10-11 | Ball detector: keep YOLO for now; whether "own computation only" also applies to it is an open experiment (backlog) | Owner wants to decide later; nothing changes until then |
+| 2026-10-12 | Working app name **Follo**, motto "Follo the match."; final name decided later after store, trademark and domain checks | Short, bilingual, verb-like; PitchCam clashed with existing sports products |

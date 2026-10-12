@@ -1,4 +1,4 @@
-# PitchCam iOS skeleton (phase 3/5)
+# Follo iOS skeleton (phase 3/5)
 
 What it does today: 4K 30 fps from the ultra-wide camera, recorded in 3-minute HEVC chunks to `Documents/chunks/`, a setup/live screen with thermal state and chunk count, a "Go live" button that creates a YouTube broadcast through the Live API (token needed) and starts recording. Not yet: on-device virtual camera (Core ML), RTMPS streaming (HaishinKit), Google Sign-In. Design mockup: see the artifact linked in `specs/status.md`.
 
@@ -6,8 +6,8 @@ What it does today: 4K 30 fps from the ultra-wide camera, recorded in 3-minute H
 
 1. Install **Xcode** from the Mac App Store (free, ~12 GB). Open it once and let it install iOS components.
 2. Xcode → Settings → Accounts → **+** → sign in with your Apple ID (a normal one; the free "Personal Team" is enough).
-3. Create the project: File → New → Project → iOS → **App**, name `PitchCam`, interface SwiftUI, language Swift. Save it in `ios/PitchCam/` and **replace** the generated `ContentView.swift`/`PitchCamApp.swift` with the files from `ios/PitchCam/PitchCam/`.
-4. Project → target PitchCam → **Signing & Capabilities**: Team = your Personal Team, Bundle Identifier = something unique, e.g. `com.<yourname>.pitchcam`. Xcode creates the certificate itself.
+3. Create the project: File → New → Project → iOS → **App**, name `Follo`, interface SwiftUI, language Swift. Save it in `ios/Follo/` and **replace** the generated `ContentView.swift`/`FolloApp.swift` with the files from `ios/Follo/Follo/`.
+4. Project → target Follo → **Signing & Capabilities**: Team = your Personal Team, Bundle Identifier = something unique, e.g. `com.<yourname>.pitchcam`. Xcode creates the certificate itself.
 5. Target → Info → add key **Privacy - Camera Usage Description** (`NSCameraUsageDescription`), value "Records the match".
 6. iPhone: Settings → Privacy & Security → **Developer Mode** → on (reboots). Connect the phone by cable, trust the Mac.
 7. Select the iPhone as the run target (top bar) and press **Run**. First launch: on the phone, Settings → General → VPN & Device Management → trust your Apple ID.

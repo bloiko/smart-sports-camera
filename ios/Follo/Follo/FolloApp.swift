@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct PitchCamApp: App {
+struct FolloApp: App {
     var body: some Scene {
         WindowGroup { SetupView().preferredColorScheme(.dark) }
     }

@@ -1,4 +1,4 @@
-# App design (PitchCam, iOS)
+# App design (Follo, iOS)
 
 Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSck7sv (owner's artifact). Skeleton code: `ios/`.
 
@@ -23,4 +23,4 @@ Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSc
 
 ## Name
 
-Working name **PitchCam**: "pitch" (the field) + "cam"; short, says what it does, easy to say in Ukrainian and English. Not final: see `decisions.md` and the trademark note in `business-plan.md` before publishing.
+Working name **Follo** (follow the game): short, reads the same in Ukrainian and English, works as a verb, neutral across sports. Motto on the splash screen: "Follo the match." Known clashes to check before publishing: several unrelated "Follo" apps in the stores (construction logistics, finance, healthcare), the Follo region in Norway and its football club, the follo.com domain. Store title should be "Follo: AI sports camera"; domain candidates follo.cam, getfollo.com. Previous working name PitchCam was dropped because of PitchCom/PitchVision/Pitchcam in sports.

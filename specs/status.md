@@ -2,7 +2,7 @@
 
 Living document: update it at the end of every work session (see `.claude/skills/project-docs/SKILL.md`). The stable plan for each phase is in `../docs/phases.md`.
 
-Last updated: 2026-10-11 (session 2, docs synced)
+Last updated: 2026-10-12 (session 4: Follo app started)
 
 | Phase | Status |
 | --- | --- |
@@ -146,7 +146,9 @@ Last updated: 2026-10-11 (session 2, docs synced)
 
 **Status:** skeleton in `ios/` (4K ultra-wide chunked recording, setup/live screen, YouTube Live API call); not compiled yet, the owner installs Xcode. Design mockup of all 10 screens: `docs/app-design.md`.
 
-**To do:** the 21-item checklist in `docs/live-edge-cases.md` (RTMPS + Core ML first, then reconnect/buffer/resume).
+**Done (code only, not compiled: no Xcode on the Mac yet):** chunked 4K recording, YouTube Live API, RTMPS streamer with 60 s buffer and reconnect to the same broadcast, resume after crash, thermal and battery steps, adaptive bitrate, preflight checks, hold-to-stop. Docs: `docs/app-design.md`, `docs/live-edge-cases.md`, `docs/run-on-iphone.md`, `docs/youtube-live.md`.
+
+**To do:** see backlog 3c (Core ML camera first). Blocked on the owner: Xcode, first run, own footage.
 
 ---
 

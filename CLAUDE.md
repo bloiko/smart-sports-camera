@@ -23,3 +23,5 @@ Follow `.claude/skills/project-docs/SKILL.md`: update `specs/` (status, results,
 - Owner's product rules: the user never marks anything by hand (find it automatically); prefer our own computation over third-party models or services with their own licences.
 - Compare camera versions on identical inputs; use `follow.py --no-render` for metrics and `--range` for quick renders.
 - The pipeline runs on the owner's M1 Mac (MPS); videos are in `~/Downloads`, working data in `work/mN/` (git-ignored).
+- Live is the main product line (phase 3 = Follo iOS app). The live camera is validated on recorded videos with `src/live_sim.py` (buffer 2 s); the Swift port must match it. Edge-case checklist with status: `docs/live-edge-cases.md`; mark items there when done.
+- Swift code in `ios/` is written without Xcode on this Mac; the owner compiles it. Keep files small and plain so build errors are easy to fix from a pasted message.

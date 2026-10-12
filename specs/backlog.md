@@ -2,7 +2,7 @@
 
 Living document. Ordered by priority; move finished items to `status.md` (Done) and note results in `results.md`.
 
-Last updated: 2026-10-11 (session 2, docs synced)
+Last updated: 2026-10-12
 
 ## P0: now
 
@@ -36,8 +36,14 @@ Last updated: 2026-10-11 (session 2, docs synced)
 - Live ball search for evening / pale grass (match 3 ball in crop 74%): ball candidates from player motion, a second ball model pass when lost.
 - Goals in the first 30–60 s: done partly (mirror through the halfway line). Open: an estimate before 30 s (halfway line + field mask ends?), and remembering goals of a pitch the owner plays on every week.
 
-### 3c. Phase 3 (Follo app): feature checklist
-See `docs/live-edge-cases.md` for the ordered checklist (21 items, status marks kept there). Next: 8 (RTMPS + Core ML), then 1–3 (reconnect, buffer, resume), 4–7, 9–12.
+### 3c. Phase 3 (Follo app): work that needs no owner input (next session starts here)
+Status of the 21 edge-case items lives in `docs/live-edge-cases.md`. Done in code (untested on a phone): 1, 2, 3, 5, 6, 12; partly 4, 7, 8.
+1. **Core ML camera on the phone (item 8):** export YOLO11s/ball_v02 to Core ML; port `src/live_sim.py` (player tiles, ball ROI, LiveGoals, goal mode, 2 s buffer, constraints) to Swift; verify on the Mac that Swift and Python give the same camera path on match 2.
+2. **UI items 9, 10, 11, 13, 14:** Do Not Disturb request, viewer view, screen dimming, stream over recording, Guided Access advice.
+3. **Highlights on the phone after Stop:** port `kickoff.py` + `highlights.py` to Swift (goals by kickoff, clips 16:9 and 9:16).
+4. **Algorithms on the simulator:** live ball search in the evening (match 3: 81% vs 100% offline), goals before 30 s, remembered goals for a known pitch.
+5. **Onboarding and "My matches" screens** per `docs/app-design.md`.
+Needs the owner: Xcode install and first run (`docs/run-on-iphone.md`), own iPhone footage, Google Cloud project for YouTube (`docs/youtube-live.md`).
 
 ## P1: next
 

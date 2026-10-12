@@ -9,7 +9,7 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 | 0. Test footage | Partially done: 3 public panoramic matches; no own iPhone footage yet |
 | 1. Offline prototype | Done (v0.1), with caveats |
 | 2. Tracking quality and own model | In progress (v0.3 camera done: goal-area framing; model v0.3 next) |
-| 3. iOS app (Follo) | In progress: skeleton + Core ML virtual camera in Swift (verified on the Mac), edge-case items 1–6, 8–14 in code; nothing run on a phone yet |
+| 3. iOS app (Follo) | In progress: skeleton + Core ML virtual camera in Swift (verified on the Mac), edge-case items 1–6, 8–14 in code, highlights after Stop, onboarding and My matches screens; nothing run on a phone yet |
 | 4. Everyday use and beta | Not started |
 | 5. YouTube live | Live simulator on the Mac, now strictly causal (buffer 2 s passes all 7 checklist events); Swift port identical |
 | 6. Android, full pitch, highlights | Not started |
@@ -160,7 +160,11 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 **Done 2026-10-12 (highlights after Stop):** `HighlightsRunner.swift` joins the 4K chunks, finds kick-offs from jersey colours sampled during the live, cuts goal-area episodes with the close-up camera into 16:9 and 9:16 clips (AVAssetWriter), `ResultView.swift` lists them with play and share. Checked on the Mac through `follosim highlights`: clips identical to the Python reference on matches 1 and 2; on match 3 the kick-off (and so the GOAL label) differs because the criterion has no margin (`results.md`).
 
-**To do:** backlog 3c items 4–5. Blocked on the owner: Xcode, first run, own footage.
+**Done 2026-10-12 (algorithms, 3c item 4):** y-guard against goal drift (`goals.py`, `LiveGoals.swift`), pitch memory (`PitchMemory.swift`: goals of the last match on the same pitch as the prior), experiments on kick-off statistics, early goals and the evening ball search in `results.md`.
+
+**Done 2026-10-12 (screens 1–4):** onboarding with 3 cards and the permission requests, "My matches" with the match list (date, link, clips, goals, 4K kept or deleted), routing in `FolloApp.swift`; the result screen writes the match record. Google Sign-In is a placeholder until the SDK is added.
+
+**To do:** everything on a real phone (owner: Xcode, first run); then the streamer buffer of encoded frames, Google Sign-In, settings screen (10), edge-case items 15–21. Blocked on the owner: Xcode, first run, own footage, Google Cloud project.
 
 **Difficulties**
 - Swift on this Mac: the Command Line Tools 16.2 cannot build any Swift (stale `module.modulemap`; SwiftPM manifests do not link). `build_mac.sh` calls swiftc with a VFS overlay instead.

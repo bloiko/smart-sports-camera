@@ -11,6 +11,7 @@ struct CameraPreview: UIViewRepresentable {
 }
 
 struct SetupView: View {
+    @Environment(\.dismiss) var dismiss
     @StateObject var cam = CameraSession()
     @StateObject var ls = LiveSession()
     @State var live: LiveTarget?
@@ -28,7 +29,10 @@ struct SetupView: View {
     var body: some View {
         ZStack {
         VStack(spacing: 12) {
-            Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded))
+            HStack {
+                if !cam.isRecording { Button { dismiss() } label: { Image(systemName: "chevron.left") } }
+                Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)); Spacer()
+            }
             if viewer && cam.isRecording {
                 ViewerView(runner: ls.runner).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
                 Text("Так бачить глядач (без затримки YouTube). Не виходь із застосунку: камера зупиниться — дивись трансляцію на іншому телефоні.").font(.caption2).foregroundStyle(.secondary)
@@ -106,6 +110,7 @@ struct SetupView: View {
     }
 
     func stop() {
+        let startedAtSaved = startedAt ?? Date()
         cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil)
         let live = ls.runner.stop(); let env = ls.runner.env
         result = true; clips = []; hlProgress = "Готую хайлайти…"
@@ -114,7 +119,12 @@ struct SetupView: View {
             let chunks = ((try? FileManager.default.contentsOfDirectory(at: ChunkWriter.dir, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "mp4" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
             var out: [HighlightsRunner.Clip] = []
             if let (c, j) = live, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
-            DispatchQueue.main.async { clips = out; hlProgress = nil }
+            DispatchQueue.main.async {
+                clips = out; hlProgress = nil
+                MatchStore.add(MatchRecord(date: startedAtSaved, watchURL: live?.watchURL, durationS: Date().timeIntervalSince(startedAtSaved),
+                                           chunkFiles: chunks.map { $0.lastPathComponent }, clipFiles: out.map { $0.file.lastPathComponent },
+                                           goals: out.filter { $0.kind == "goal" }.count, knownPitch: ls.runner.knownPitch))
+            }
         }
         if let l = live { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
         status = "Записано \(cam.chunkCount) файлів у Documents/chunks"

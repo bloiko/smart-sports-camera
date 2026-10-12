@@ -21,6 +21,10 @@ Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSc
 
 1 Google sign-in (once) · 2 onboarding, 3 cards · 3 permissions · 4 my matches · 5 position check · 6 ready (landscape) · 7 live, 7b live with warnings, 7c viewer view · 8 result with highlights · 9 clip (16:9 / 9:16, "not a goal") · 10 settings (YouTube privacy, keep wide recording N days, mute venue audio, storage, privacy/consent, delete account).
 
+## Status of the screens (2026-10-12)
+
+In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position check inside the setup screen), 6, 7, 7b, 7c (viewer view), 8, 9 (play and share per clip; no "not a goal" button yet). Missing: 10 settings.
+
 ## Name
 
 Working name **Follo** (follow the game): short, reads the same in Ukrainian and English, works as a verb, neutral across sports. Motto on the splash screen: "Follo the match." Known clashes to check before publishing: several unrelated "Follo" apps in the stores (construction logistics, finance, healthcare), the Follo region in Norway and its football club, the follo.com domain. Store title should be "Follo: AI sports camera"; domain candidates follo.cam, getfollo.com. Previous working name PitchCam was dropped because of PitchCom/PitchVision/Pitchcam in sports.

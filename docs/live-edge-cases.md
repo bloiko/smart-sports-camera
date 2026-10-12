@@ -71,7 +71,7 @@ Status: ☐ not started, ◐ in progress, ☑ done.
 - ☑ 11. Screen dims after 10 s, touch restores (`DimOverlay`; auto-lock off) (code, untested)
 - ☑ 12. Hold 1 s to stop
 - ☑ 13. Stream over recording: at < 1 GB free the recording stops, the stream continues (`LiveSession.tick`) (code, untested)
-- ☑ 14. Guided Access advice (in `BeforeGameSheet` until the onboarding screens exist) (code, untested)
+- ☑ 14. Guided Access advice in onboarding (card 3 of `OnboardingView`) and in `BeforeGameSheet` (code, untested)
 
 **Nice to have**
 - ☐ 15. Tripod-move detection and goal re-estimation

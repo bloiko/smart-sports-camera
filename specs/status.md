@@ -2,16 +2,16 @@
 
 Living document: update it at the end of every work session (see `.claude/skills/project-docs/SKILL.md`). The stable plan for each phase is in `../docs/phases.md`.
 
-Last updated: 2026-10-12 (session 4: Follo app started)
+Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 | Phase | Status |
 | --- | --- |
 | 0. Test footage | Partially done: 3 public panoramic matches; no own iPhone footage yet |
 | 1. Offline prototype | Done (v0.1), with caveats |
 | 2. Tracking quality and own model | In progress (v0.3 camera done: goal-area framing; model v0.3 next) |
-| 3. iOS app (Follo) | Started 2026-10-12: skeleton, design, edge-case checklist 1/21 partly done |
+| 3. iOS app (Follo) | In progress: skeleton + Core ML virtual camera in Swift (verified on the Mac), edge-case items 1–6, 8–14 in code; nothing run on a phone yet |
 | 4. Everyday use and beta | Not started |
-| 5. YouTube live | Started early: live simulator on the Mac (buffer 2 s passes all 7 checklist events) |
+| 5. YouTube live | Live simulator on the Mac, now strictly causal (buffer 2 s passes all 7 checklist events); Swift port identical |
 | 6. Android, full pitch, highlights | Not started |
 
 ---
@@ -127,8 +127,10 @@ Last updated: 2026-10-12 (session 4: Follo app started)
 - Buffer study on 3 matches: 2 s is the minimum that passes all 7 checklist events and keeps the camera smooth; 3–5 s add nothing measurable. Results in `results.md`.
 - Goals in the first minutes: mirrored through the halfway line (`centre_line`), error at 30–60 s down from ~900 px to 54–125 px in matches 2 and 3; match 1 still unknown at 30 s, fine from 60 s.
 
+**Done 2026-10-12:** strictly causal camera (`src/live_cam.py`), 7/7 with buffer 2 s; numbers in `results.md`.
+
 **To do**
-- Measure the detection budget on a real iPhone (Core ML); it may change the number of tiles.
+- Measure the detection budget on a real iPhone (Core ML); it may change the number of tiles (Mac Core ML: players 42 ms per 2 tiles, ball 14 ms per ROI).
 - Better live ball search in the evening / pale-grass case (match 3: 81% ball in crop vs 100% offline).
 - No goal estimate before 30 s, and in match 1 both goals are still wrong at 30 s.
 
@@ -148,7 +150,25 @@ Last updated: 2026-10-12 (session 4: Follo app started)
 
 **Done (code only, not compiled: no Xcode on the Mac yet):** chunked 4K recording, YouTube Live API, RTMPS streamer with 60 s buffer and reconnect to the same broadcast, resume after crash, thermal and battery steps, adaptive bitrate, preflight checks, hold-to-stop. Docs: `docs/app-design.md`, `docs/live-edge-cases.md`, `docs/run-on-iphone.md`, `docs/youtube-live.md`.
 
-**To do:** see backlog 3c (Core ML camera first). Blocked on the owner: Xcode, first run, own footage.
+**Done 2026-10-12 (Core ML camera, edge-case item 8):**
+- `ios/FolloCore`: Swift package with the whole live camera (field mask, halfway line, live goals, ball tracker, Core ML detector, camera with 2 s buffer) and `follosim`, a Mac tool that runs it on recorded matches. Compiles on the Mac with the Command Line Tools (`build_mac.sh`); `LiveCameraRunner.swift` in the app is type-checked the same way.
+- Swift gives the same camera path as Python on all 3 matches (0.0000 px), same ROIs and balls, masks IoU ≥ 0.99 (`results.md`).
+- Core ML export (`src/export_coreml.py`), detection on the Mac through Core ML: see `results.md`.
+- App wiring: position check before Go live (field mask from 7 frames over 10 s; Go live disabled until the pitch is in frame and does not touch the left/right edge), frames → detection → 2 s ring → 1080p crop → streamer; thermal step changes the detection cadence.
+
+**Done 2026-10-12 (UI, edge-case items 9, 10, 11, 13, 14):** advice sheet before the first live (Do Not Disturb, Guided Access, power bank), call detection, viewer view of the real 1080p output, screen dimming after 10 s, stream over recording when storage is low. Code only.
+
+**To do:** backlog 3c items 3–5. Blocked on the owner: Xcode, first run, own footage.
+
+**Difficulties**
+- Swift on this Mac: the Command Line Tools 16.2 cannot build any Swift (stale `module.modulemap`; SwiftPM manifests do not link). `build_mac.sh` calls swiftc with a VFS overlay instead.
+- Core ML export failed with torch 2.14 (coremltools 9.0 bug): separate `.venv-export` with torch 2.7.
+- A Swift command-line loop without `autoreleasepool` leaked 1.5 MB per frame and was killed at 3000 frames (exit 137).
+- Parity hunting: the batch simulator looked ahead further than the buffer in four places; the recorded ball hints were rounded while the computation used the unrounded ones (74 ROI mismatches until fixed); `numpy.argsort` is not stable by default.
+
+**Lessons learned**
+- Write the Python reference in the same streaming form as the port (one object, `push(frame)`), with no numpy look-ahead; then a port can be checked to the last digit instead of "close enough".
+- Keep the recorded data exactly what the algorithm used (round before use, not only before writing).
 
 ---
 

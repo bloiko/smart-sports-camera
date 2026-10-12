@@ -9,7 +9,10 @@ final class LiveSession: ObservableObject {
     struct Saved: Codable { var broadcastId: String; var rtmpsURL: String; var streamKey: String; var watchURL: String; var startedAt: Date }
     @Published var saved: Saved? = Self.load()
     @Published var warning: String?
+    @Published var recordingStopped = false     // пункт 13: місця мало → запис зупинено, стрім триває
+    let calls = CallWatcher()
     let streamer = Streamer()
+    let runner = LiveCameraRunner()        // пункт 8: віртуальна камера Core ML
 
     static func load() -> Saved? {
         guard let d = UserDefaults.standard.data(forKey: "live.saved") else { return nil }
@@ -30,7 +33,7 @@ final class LiveSession: ObservableObject {
     }
 
     /// Пункти 4 і 6: реакція на нагрів і батарею під час ефіру. Викликати раз на кілька секунд.
-    func tick(onFrameRate: (Double) -> Void, onDetectEvery: (Int) -> Void, onEnd: () -> Void) {
+    func tick(onFrameRate: (Double) -> Void, onDetectEvery: (Int) -> Void, onLowStorage: () -> Void, onEnd: () -> Void) {
         let t = ProcessInfo.processInfo.thermalState
         switch t {
         case .nominal, .fair: onFrameRate(30); onDetectEvery(2); warning = nil
@@ -38,6 +41,9 @@ final class LiveSession: ObservableObject {
         case .critical: onFrameRate(25); onDetectEvery(4); warning = "Дуже гаряче: постав телефон у тінь"
         @unknown default: break
         }
+        // пункт 13: стрім важливіший за запис — при < 1 GB вільного місця зупиняємо лише запис
+        let free = (try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())[.systemFreeSize] as? Int64) ?? Int64.max
+        if free < 1_000_000_000 && !recordingStopped { recordingStopped = true; onLowStorage(); warning = "Місце закінчилось: запис зупинено, ефір триває" }
         let b = UIDevice.current.batteryLevel
         if b >= 0 && UIDevice.current.batteryState == .unplugged {
             if b <= 0.05 { onEnd() }

@@ -2,7 +2,7 @@
 
 Living document. Add a row for every new model or pipeline version, per match. Definitions of the metrics are in `../docs/testing-strategy.md`.
 
-Last updated: 2026-10-11 (session 3: live simulator)
+Last updated: 2026-10-12 (session 4: causal live camera, Swift port)
 
 ## Tracker metrics (`follow.py` → `metrics.json`)
 
@@ -157,6 +157,48 @@ Error of the automatic goal position against hand-measured goal mouths (`specs/c
 | 2026-10-11 | 3 | v0.3 | 22 of 24 (a spare ball off the pitch, one unclear dark dot) |
 | 2026-10-11 | 2 | v0.3 + background filter, points removed by the filter | 3 of 3 false: letter "O" of the logo on the grass (2), yellow training dummies (1) |
 | 2026-10-11 | 1 / 3 | v0.3 + background filter | 24 of 24 / 23 of 24 (a player's head) |
+
+## Live camera, strictly causal (2026-10-12)
+
+The batch simulator of 2026-10-11 quietly looked further ahead than its buffer (goal-mode anticipation up to B frames beyond f + B, ball confirmation 0.6 s beyond, field depth from the first 64 s before frame 0, border shift 2 s ahead, field mask and image bounds from the whole video). `src/live_cam.py` is the streaming rewrite: frame f is emitted when frame f + B arrives and sees nothing later; the field mask, image bounds and halfway line come from the first 10 s only (the position check on the phone). Detection unchanged except the mask. `LiveGoals` now works on a 1/4 grid with its own Gaussian kernel (no cv2), so the Swift port gives the same numbers. Same inputs as the 2026-10-11 table, buffer 2 s.
+
+| Match | Version | Ball in crop | First 2 min | Players | Pan mean / > 900 px/s | Jerk p95 | Checklist |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | live 2 s, batch (2026-10-11, border shift look-ahead 0) | 97% | 94% | 64% | 115 / 1.1% | 292 | 1/1 |
+| 1 | live 2 s, causal, 10 s mask | 93.5% | 88% | 65% | 119 / 1.5% | 347 | 1/1 |
+| 2 | live 2 s, batch | 92% | 92% | 58% | 121 / 1.3% | 393 | 4/4 |
+| 2 | live 2 s, causal, 10 s mask | 92% | 94% | 59% | 98 / 1.3% | 307 | 4/4 |
+| 3 | live 2 s, batch | 81% | 77% | 63% | 193 / 2.7% | 475 | 2/2 |
+| 3 | live 2 s, causal, 10 s mask | 78% | 77% | 64% | 123 / 2.7% | 288 | 2/2 |
+
+Notes:
+- The border-shift look-ahead (2 s in the batch version) was measured first on its own: 0 gives the same 7/7 and a slightly smoother camera on all matches, so it is 0 now (`shift_la_s`).
+- The 10 s mask costs ball in crop in matches 1 and 3 (ball found 28.1% → 24.3% and 9.6% → 8.5% of passes): with the game already running in the first 10 s, the median of 7 frames keeps some players and the mask edge moves. On the phone the position check runs before kick-off, so this is a pessimistic simulation.
+- Live goals in match 3: the right goal drifts to (3287, 860) after 150 s (truth (3088, 565)); the estimate only grows outward and players walking to the corner flag pull it. Same in the old code (checked); the checklist still passes because the goal at 2:04 is before the drift. Backlog 3c item 4.
+
+### Swift port vs Python (2026-10-12, `ios/FolloCore`, Mac)
+
+Checked on the same inputs, all three matches, buffer 2 s (`src/compare_swift.py`, `compare_env.py`, `follosim track`):
+
+| Stage | Test | Result |
+| --- | --- | --- |
+| Camera (`LiveCamera.swift` vs `live_cam.py`) | Same detections and environment | X, Y, crop width and height differ by 0.0000 px on every frame; goal mode, goal index and accepted balls identical; 1–2 s per match |
+| Ball tracker (`BallTracker.swift` vs `detect()`) | Python candidates replayed | 0 ROI mismatches and 0 ball mismatches in 2979–3000 ball frames per match |
+| Pre-game environment (`FieldMask.swift`, `CentreLine.swift` vs `fieldmask.py`, `centre_line`) | Same 7 frames of the first 10 s | Mask IoU 0.988–0.996; image bounds within 3 px except a few columns; halfway line within 1 px |
+| Core ML detection (`Detector.swift`, exported YOLO11s 1280×672 and `ball_v02` 640×640, NMS inside) | Whole video, Mac (ANE/GPU) | see the table below |
+
+Core ML detection on the Mac (`follosim detect`, fp16 models, same tracker and camera as above, buffer 2 s), compared with the Python detection (Ultralytics on MPS) on the same videos. `matched` = Python player boxes (conf ≥ 0.25) with a Swift box of IoU ≥ 0.5; `both` = frames where both accepted a ball, and how many of them agree within 20 px.
+
+| Match | Players matched | Ball found (Python → Core ML) | Both, within 20 px | Ball in crop (Python → Core ML) | Checklist (Python → Core ML) | Detection time, Mac |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 99.1% | 24.3% → 28.8% | 455, 68% | 93.5% → 91.6% | 1/1 → 1/1 | 125 s (players 55 ms per 2 tiles, ball 8 ms per ROI) |
+| 2 | 97.5% | 46.3% → 48.1% | 1122, 87% | 91.8% → 93.2% | 4/4 → **3/4** | 113 s (43 ms, 11 ms) |
+| 3 | 76.5% | 8.5% → 28.1% | 195, 91% | 77.8% → 92.4% | 2/2 → 2/2 | — |
+
+- Match 2, attack at 1:02.3 (ball rolls into the penalty area): goal mouth in frame 45% (Python 91%, a thin pass). Cause in the Core ML run: a static look-alike at (2974, 201) accepted as the ball for about a second (background difference 15–25, right at the `BG_MIN` = 15 threshold), so goal mode started 1.2 s later. Not a camera-logic difference (the logic is identical); a detector-noise difference. Backlog 3c item 4: make the static filter robust to repeated same-spot detections.
+- Match 3 is 3840×1504: the fixed Core ML input 1280×672 letterboxes a 1970×1504 tile to 880×672, while Ultralytics' rectangular inference gave 1280×992, hence fewer players matched (76.5%). The ball model (fixed 640×640 ROI) is unaffected and finds the ball 3× more often than the MPS run, which is unexplained (fp16 vs fp16, different resampling). The player input size must be chosen per frame shape: for the phone's 16:9 4K frame this is still open (backlog).
+- An export with `half=False` gives byte-identical detections: Ultralytics 8.4 ignores `half` for Core ML (it warns to use `quantize`), so the models are whatever its default is; precision is not the cause of the differences.
+- Core ML speed on the M1 Mac is about 3× faster than Ultralytics on MPS (players 43–55 ms vs 134–223 ms per 2 tiles); the phone will be slower, to be measured.
 
 ## Goal checklist
 

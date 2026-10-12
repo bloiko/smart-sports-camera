@@ -18,15 +18,26 @@ struct SetupView: View {
     @State var error: String?
     @State var startedAt: Date?
     @State var thermal = ProcessInfo.processInfo.thermalState
+    @State var lastTouch = Date()                                   // пункт 11
+    @State var viewer = false                                       // пункт 10
+    @State var showAdvice = !UserDefaults.standard.bool(forKey: "advice.shown")   // пункти 9, 14
 
     var body: some View {
+        ZStack {
         VStack(spacing: 12) {
             Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded))
-            CameraPreview(session: cam.session).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+            if viewer && cam.isRecording {
+                ViewerView(runner: ls.runner).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+                Text("Так бачить глядач (без затримки YouTube). Не виходь із застосунку: камера зупиниться — дивись трансляцію на іншому телефоні.").font(.caption2).foregroundStyle(.secondary)
+            } else {
+                CameraPreview(session: cam.session).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            if cam.isRecording { Toggle("Погляд глядача", isOn: $viewer).font(.footnote) }
             HStack {
                 stat(cam.isRecording ? "\(cam.chunkCount)" : "—", "файлів 4K")
                 stat(thermalText, "телефон")
                 stat(startedAt.map { fmt(Date().timeIntervalSince($0)) } ?? "—", "у ефірі")
+                stat(startedAt != nil ? "\(Int(ls.runner.ballShare * 100))%" : "—", "м'яч")
             }
             if let l = live {
                 HStack { Text(l.watchURL).font(.footnote).lineLimit(1); Spacer()
@@ -42,15 +53,29 @@ struct SetupView: View {
             }
             Button(cam.isRecording ? "■  СТОП (утримуй)" : "●  GO LIVE") { if !cam.isRecording { go() } }
                 .simultaneousGesture(LongPressGesture(minimumDuration: 1).onEnded { _ in if cam.isRecording { stop() } })
+                .disabled(!cam.isRecording && (ls.runner.env == nil || ls.runner.env?.positionProblem != nil))
                 .font(.system(size: 22, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity).padding(16)
                 .background(cam.isRecording ? Color.gray.opacity(0.4) : Color.red).foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .padding(16)
-        .onAppear { cam.configure(); UIApplication.shared.isIdleTimerDisabled = true }
+        if cam.isRecording { DimOverlay(lastTouch: $lastTouch) }
+        }
+        .contentShape(Rectangle()).simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastTouch = Date() })
+        .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
+        .onAppear {
+            cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
+            ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
+            // до ефіру: кадри для перевірки позиції (маска поля); під час ефіру: віртуальна камера
+            cam.frameHandler = { [ls] sb in
+                if ls.runner.isLive { ls.runner.push(sb) }
+                else if let pb = CMSampleBufferGetImageBuffer(sb) { ls.runner.addPrerollFrame(pb, time: CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))) }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { _ in }, onEnd: { stop() }) }
+            if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
+            else if error == nil { status = ls.runner.env == nil ? "Перевіряю позицію (10 с)…" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
         }
     }
 
@@ -68,17 +93,16 @@ struct SetupView: View {
                 if let l = live {
                     ls.save(.init(broadcastId: l.broadcastId, rtmpsURL: l.rtmpsURL, streamKey: l.streamKey, watchURL: l.watchURL, startedAt: startedAt!))
                     await ls.streamer.start(url: l.rtmpsURL, key: l.streamKey)
-                    // TODO: віртуальна камера (Core ML) → ls.streamer.push(crop1080p, at: time); поки що — центр кадру
-                    cam.frameHandler = { [ls] sb in
-                        if let pb = CMSampleBufferGetImageBuffer(sb) { Task { @MainActor in ls.streamer.push(pb, at: CMSampleBufferGetPresentationTimeStamp(sb)) } }
-                    }
                 }
+                // віртуальна камера: кроп 1920×1080 із затримкою 2 с → стрімер (і «погляд глядача», пункт 10)
+                ls.runner.onOutput = { [ls] pb, t in Task { @MainActor in ls.streamer.push(pb, at: t) } }
+                do { try ls.runner.start() } catch { self.error = "Камера: \(error.localizedDescription) (моделі players/ball.mlmodelc у проєкті?)" }
             } catch { self.error = "YouTube: \(error.localizedDescription)" }
         }
     }
 
     func stop() {
-        cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil); cam.frameHandler = nil
+        cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil); ls.runner.stop()
         if let l = live { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
         status = "Записано \(cam.chunkCount) файлів у Documents/chunks"
     }

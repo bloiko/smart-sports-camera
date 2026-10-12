@@ -2,7 +2,7 @@
 
 Living document. Ordered by priority; move finished items to `status.md` (Done) and note results in `results.md`.
 
-Last updated: 2026-10-12
+Last updated: 2026-10-12 (session 4: Core ML camera done)
 
 ## P0: now
 
@@ -37,11 +37,11 @@ Last updated: 2026-10-12
 - Goals in the first 30–60 s: done partly (mirror through the halfway line). Open: an estimate before 30 s (halfway line + field mask ends?), and remembering goals of a pitch the owner plays on every week.
 
 ### 3c. Phase 3 (Follo app): work that needs no owner input (next session starts here)
-Status of the 21 edge-case items lives in `docs/live-edge-cases.md`. Done in code (untested on a phone): 1, 2, 3, 5, 6, 12; partly 4, 7, 8.
-1. **Core ML camera on the phone (item 8):** export YOLO11s/ball_v02 to Core ML; port `src/live_sim.py` (player tiles, ball ROI, LiveGoals, goal mode, 2 s buffer, constraints) to Swift; verify on the Mac that Swift and Python give the same camera path on match 2.
-2. **UI items 9, 10, 11, 13, 14:** Do Not Disturb request, viewer view, screen dimming, stream over recording, Guided Access advice.
+Status of the 21 edge-case items lives in `docs/live-edge-cases.md`. Done in code (untested on a phone): 1–6, 8–14; partly 7.
+1. ~~Core ML camera on the phone (item 8)~~ Done 2026-10-12 (`ios/FolloCore`, `follosim`, results in `results.md`). Left for the phone: measure the real detection budget (Mac: players 43–55 ms per tile pair, ball 8–14 ms); choose the player-model input size for the phone's 16:9 4K frame (the export is 1280×672 for the 4096×1084 panoramas; on 3840×1504 it already loses 24% of players, see `results.md`); the 2 s frame ring holds ~60 4K frames (~750 MB) — if the phone runs out of memory, keep the ring at 2560 px wide or shorten the buffer; the streamer's 60 s buffer of raw 1080p frames (~5 GB) must become a buffer of encoded frames (VideoToolbox) before a real test.
+2. ~~UI items 9, 10, 11, 13, 14~~ Done in code 2026-10-12 (`Overlays.swift`, `Advice.swift`, `LiveSession.tick`), untested on a phone.
 3. **Highlights on the phone after Stop:** port `kickoff.py` + `highlights.py` to Swift (goals by kickoff, clips 16:9 and 9:16).
-4. **Algorithms on the simulator:** live ball search in the evening (match 3: 81% vs 100% offline), goals before 30 s, remembered goals for a known pitch.
+4. **Algorithms on the simulator:** live ball search in the evening (match 3: 78% vs 100% offline, ball found on 8.5% of passes), goals before 30 s, remembered goals for a known pitch; live goals drift outward late in match 3 (right goal 200 px / 300 px off after 150 s: players at the corner flag) — the estimate should not grow from a thin tail of the heat map.
 5. **Onboarding and "My matches" screens** per `docs/app-design.md`.
 Needs the owner: Xcode install and first run (`docs/run-on-iphone.md`), own iPhone footage, Google Cloud project for YouTube (`docs/youtube-live.md`).
 

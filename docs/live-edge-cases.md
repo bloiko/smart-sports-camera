@@ -56,22 +56,22 @@ Key fact: **iOS stops the camera as soon as the app leaves the screen.** Most ca
 Status: ☐ not started, ◐ in progress, ☑ done.
 
 **Critical**
-- ◐ 8. RTMPS streaming (HaishinKit, code) and Core ML (not started) virtual camera on the phone
+- ◐ 8. RTMPS streaming (HaishinKit, code, untested) and Core ML virtual camera on the phone (done 2026-10-12: `ios/FolloCore` = Swift port of the live camera, identical path to Python on 3 matches; Core ML models exported; `LiveCameraRunner.swift` wires camera frames → detection → 2 s buffer → 1080p crop → streamer; not yet run on a phone)
 - ☑ 1. Reconnect (code in `Streamer.swift`, untested on a phone) to the same broadcast after a call, network loss or crash
 - ☑ 2. Frame buffer (code, untested) up to 60 s during a network drop
 - ☑ 3. "Resume the live?" (code, untested) after a crash or reboot
-- ◐ 4. Thermal steps (fps and bitrate; sparser detection waits for Core ML) (25 fps → bitrate → sparser detection)
+- ☑ 4. Thermal steps (code, untested): 25 fps → bitrate → sparser detection (`setDetectEvery`)
 - ☑ 5. Adaptive bitrate (code, untested) 4.5 → 3 → 2 Mbit/s
 - ☑ 6. Battery warnings (code, untested) at 20/10%, clean end at 5%
 - ◐ 7. Pre-start checks (storage, battery, heat; YouTube rights and token pending): storage, channel live rights, Google token, mobile data
 
 **Important**
-- ☐ 9. Do Not Disturb request before Go live
-- ☐ 10. Viewer view in the app; hint before leaving
-- ☑ 11. Screen dims after 10 s, touch restores (auto-lock off done; dimming pending)
+- ☑ 9. Do Not Disturb advice before the first Go live (iOS cannot switch Focus from code: `BeforeGameSheet`); calls detected with CallKit, a warning shown, the streamer reconnects after the call (code, untested)
+- ☑ 10. Viewer view in the app (`ViewerView`: the 1080p crop after the 2 s buffer, exactly what goes to YouTube) with the hint not to leave the app (code, untested)
+- ☑ 11. Screen dims after 10 s, touch restores (`DimOverlay`; auto-lock off) (code, untested)
 - ☑ 12. Hold 1 s to stop
-- ☐ 13. Stream over recording when storage is low
-- ☐ 14. Guided Access advice in onboarding
+- ☑ 13. Stream over recording: at < 1 GB free the recording stops, the stream continues (`LiveSession.tick`) (code, untested)
+- ☑ 14. Guided Access advice (in `BeforeGameSheet` until the onboarding screens exist) (code, untested)
 
 **Nice to have**
 - ☐ 15. Tripod-move detection and goal re-estimation

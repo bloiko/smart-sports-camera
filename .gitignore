@@ -11,9 +11,13 @@ runs/
 out*/
 fieldmask.jpg
 __pycache__/
-.venv/
+.venv*/
 # Stock YOLO weights are downloaded automatically by Ultralytics
 yolo11*.pt
 
 # OAuth client and tokens for YouTube (golive.py)
 secrets/
+# Core ML exports are rebuilt with src/export_coreml.py
+models/coreml/
+models/*.mlpackage
+.build-mac/

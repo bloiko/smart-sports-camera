@@ -82,30 +82,40 @@ class LiveGoals:
     ≥ thr_s секунд, лише росте, тож оцінка не «стрибає» назад. Великий стрибок назовні (> confirm_px)
     приймається, лише якщо повторився в двох оновленнях поспіль (викиди: люди біля кутового).
     Перевірка на 3 матчах (2026-10-11): див. specs/results.md, розділ live.
+    2026-10-12: карта рахується на сітці 1/SCALE з власним (ненормованим) гауссовим ядром і нульовими краями —
+    без cv2, щоб Swift-порт (ios/FolloCore LiveGoals.swift) давав ті самі числа; на телефоні це в 16 разів дешевше.
     """
+    SCALE = 4
 
     def __init__(self, fmask, sample_dt, thr_s=3.0, sigma=25, confirm_px=150, centre=None, mirror_px=300):
         """centre: функція x(y) центральної лінії (centre_line). Ворота сторони, до якої гра ще не доходила,
         беруться віддзеркаленням з протилежної, якщо віддзеркалення далі назовні більш ніж на mirror_px."""
-        self.fm, self.dt, self.thr, self.sig, self.cp = fmask, sample_dt, thr_s, sigma, confirm_px
-        self.raw = np.zeros(fmask.shape, np.float32); self.best = None; self.pending = [None, None]
+        s = self.SCALE; H, W = fmask.shape
+        self.fm, self.dt, self.thr, self.cp = fmask, sample_dt, thr_s, confirm_px
+        self.raw = np.zeros(((H + s - 1) // s, (W + s - 1) // s), np.float64); self.best = None; self.pending = [None, None]
+        r = int(np.ceil(3 * sigma / s)); self.kernel = np.exp(-0.5 * (np.arange(-r, r + 1) * s / sigma) ** 2)
         self.centre, self.mx = centre, mirror_px
 
     def add(self, persons):
-        H, W = self.fm.shape
+        H, W = self.fm.shape; s = self.SCALE
         for b in persons:
             fx, fy = (b[0] + b[2]) / 2, b[3]
             if b[4] >= 0.25 and 12 <= b[3] - b[1] <= 260:
                 x, y = min(int(fx), W - 1), min(int(fy), H - 1)
-                if self.fm[y, x]: self.raw[y, x] += self.dt
+                if self.fm[y, x]: self.raw[y // s, x // s] += self.dt
+
+    def heat(self):
+        k = self.kernel
+        h = np.apply_along_axis(lambda v: np.convolve(v, k, 'same'), 1, self.raw)
+        return np.apply_along_axis(lambda v: np.convolve(v, k, 'same'), 0, h)
 
     def update(self):
-        heat = cv2.GaussianBlur(self.raw, (0, 0), self.sig) * (2 * np.pi * self.sig ** 2)
-        n, lab, st, _ = cv2.connectedComponentsWithStats((heat > self.thr).astype(np.uint8))
+        s = self.SCALE
+        n, lab, st, _ = cv2.connectedComponentsWithStats((self.heat() > self.thr).astype(np.uint8), connectivity=8)
         if n < 2: return self.best
         ys, xs = np.nonzero(lab == 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA])))
-        l, r = xs <= xs.min() + 40, xs >= xs.max() - 40
-        t = np.array([[xs[l].mean(), ys[l].mean()], [xs[r].mean(), ys[r].mean()]])
+        l, r = xs <= xs.min() + 40 // s, xs >= xs.max() - 40 // s
+        t = np.array([[xs[l].mean(), ys[l].mean()], [xs[r].mean(), ys[r].mean()]]) * s + (s - 1) / 2
         if self.best is None: self.best = t; return self.mirrored()
         for k, outward in ((0, t[0, 0] < self.best[0, 0]), (1, t[1, 0] > self.best[1, 0])):
             if not outward: self.pending[k] = None; continue

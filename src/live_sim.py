@@ -30,6 +30,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLAYER_EVERY, PLAYER_IMGSZ, PLAYER_TILES = 4, 1280, 2   # 2 плитки: на склеєній панорамі 4096 px далекі гравці
 # удвічі дрібніші, ніж буде на 4K з телефона; одна плитка губила 40% далеких гравців (матч 2)
 BALL_EVERY, ROI, ROI_UP, BALL_CONF, BALL_CONF_NEAR, LOST_ROIS = 2, 320, 2, 0.4, 0.25, 2
+# experiments without editing the file: LIVE_LOST_ROIS=3 LIVE_BALL_CONF=0.3 python src/live_sim.py …
+LOST_ROIS, BALL_CONF = int(os.environ.get('LIVE_LOST_ROIS', LOST_ROIS)), float(os.environ.get('LIVE_BALL_CONF', BALL_CONF))
 BALL_MODEL = os.path.join(ROOT, 'models', 'ball_v02.pt')
 BG_EVERY_S, BG_N, BG_MIN = 3.0, 9, 15
 CAM = dict(out_w=1920, out_h=1080, spread_k=1.4, focus_px=300, min_crop_w=[800, 1700], max_crop_w=[1600, 2800],

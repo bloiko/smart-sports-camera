@@ -87,12 +87,17 @@ class LiveGoals:
     """
     SCALE = 4
 
-    def __init__(self, fmask, sample_dt, thr_s=3.0, sigma=25, confirm_px=150, centre=None, mirror_px=300):
+    def __init__(self, fmask, sample_dt, thr_s=3.0, sigma=25, confirm_px=150, centre=None, mirror_px=300, dy_max=60, prior=None):
         """centre: функція x(y) центральної лінії (centre_line). Ворота сторони, до якої гра ще не доходила,
-        беруться віддзеркаленням з протилежної, якщо віддзеркалення далі назовні більш ніж на mirror_px."""
+        беруться віддзеркаленням з протилежної, якщо віддзеркалення далі назовні більш ніж на mirror_px.
+        dy_max: зсув назовні приймається, лише якщо y кінчика змінився не більше ніж на dy_max px (кутові удари тягнуть
+        кінчик до кутового прапорця — стрибок по y; уточнення воріт рухає його по x). 2026-10-12: без цього наприкінці
+        матчів 2 і 3 похибка 185–335 px, з ним ≤ 68 px.
+        prior: ворота з попереднього матчу на цьому ж полі (пам'ять поля) — оцінка є з першої секунди і далі уточнюється."""
         s = self.SCALE; H, W = fmask.shape
-        self.fm, self.dt, self.thr, self.cp = fmask, sample_dt, thr_s, confirm_px
-        self.raw = np.zeros(((H + s - 1) // s, (W + s - 1) // s), np.float64); self.best = None; self.pending = [None, None]
+        self.fm, self.dt, self.thr, self.cp, self.dy = fmask, sample_dt, thr_s, confirm_px, dy_max
+        self.raw = np.zeros(((H + s - 1) // s, (W + s - 1) // s), np.float64); self.pending = [None, None]
+        self.best = np.array(prior, float) if prior is not None else None
         r = int(np.ceil(3 * sigma / s)); self.kernel = np.exp(-0.5 * (np.arange(-r, r + 1) * s / sigma) ** 2)
         self.centre, self.mx = centre, mirror_px
 
@@ -118,7 +123,7 @@ class LiveGoals:
         t = np.array([[xs[l].mean(), ys[l].mean()], [xs[r].mean(), ys[r].mean()]]) * s + (s - 1) / 2
         if self.best is None: self.best = t; return self.mirrored()
         for k, outward in ((0, t[0, 0] < self.best[0, 0]), (1, t[1, 0] > self.best[1, 0])):
-            if not outward: self.pending[k] = None; continue
+            if not outward or abs(t[k, 1] - self.best[k, 1]) > self.dy: self.pending[k] = None; continue
             if abs(t[k, 0] - self.best[k, 0]) <= self.cp: self.best[k] = t[k]; self.pending[k] = None
             elif self.pending[k] is not None and abs(t[k, 0] - self.pending[k][0]) <= self.cp: self.best[k] = t[k]; self.pending[k] = None
             else: self.pending[k] = t[k]

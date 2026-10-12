@@ -12,10 +12,14 @@ public final class LiveGoals {
     var pending: [Pt?] = [nil, nil]
     public var centre: ((Double) -> Double)?
 
+    let dyMax: Double
+    /// dyMax: an outward move is accepted only if the tip's y changes by ≤ dyMax px (corner kicks pull the tip to the
+    /// corner flag: a jump in y; a better view of the goal moves it in x). prior: goals of an earlier match on this
+    /// pitch (pitch memory): known from the first second, refined outward as usual.
     public init(fmask: Mask, sampleDt: Double, thrS: Double = 3.0, sigma: Double = 25, confirmPx: Double = 150,
-                centre: ((Double) -> Double)? = nil, mirrorPx: Double = 300) {
+                centre: ((Double) -> Double)? = nil, mirrorPx: Double = 300, dyMax: Double = 60, prior: [Pt]? = nil) {
         let s = Self.scale
-        fm = fmask; dt = sampleDt; thr = thrS; cp = confirmPx; mx = mirrorPx; self.centre = centre
+        fm = fmask; dt = sampleDt; thr = thrS; cp = confirmPx; mx = mirrorPx; self.centre = centre; self.dyMax = dyMax; best = prior
         gw = (fmask.w + s - 1) / s; gh = (fmask.h + s - 1) / s
         raw = [Double](repeating: 0, count: gw * gh)
         let r = Int((3 * sigma / Double(s)).rounded(.up))
@@ -62,7 +66,7 @@ public final class LiveGoals {
         guard var b = best else { best = t; return mirrored() }
         for k in 0..<2 {
             let outward = k == 0 ? t[0].x < b[0].x : t[1].x > b[1].x
-            if !outward { pending[k] = nil; continue }
+            if !outward || abs(t[k].y - b[k].y) > dyMax { pending[k] = nil; continue }
             if abs(t[k].x - b[k].x) <= cp { b[k] = t[k]; pending[k] = nil }
             else if let p = pending[k], abs(t[k].x - p.x) <= cp { b[k] = t[k]; pending[k] = nil }
             else { pending[k] = t[k] }
@@ -72,7 +76,7 @@ public final class LiveGoals {
     }
 
     /// Our own estimate can only be too far inside; take the outer of own and mirrored (through the halfway line).
-    func mirrored() -> [Pt]? {
+    public func mirrored() -> [Pt]? {
         guard let o = best, let c = centre else { return best }
         var b = o
         let ml = 2 * c(o[1].y) - o[1].x, mr = 2 * c(o[0].y) - o[0].x

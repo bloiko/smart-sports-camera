@@ -14,5 +14,5 @@ YAML
 FLAGS="${OPT:--O} -Xcc -ivfsoverlay -Xcc .build-mac/overlay.yaml -vfsoverlay .build-mac/overlay.yaml"
 swiftc $FLAGS -module-name FolloCore -emit-module -emit-module-path .build-mac/FolloCore.swiftmodule -emit-library -Xlinker -install_name -Xlinker "$PWD/.build-mac/libFolloCore.dylib" -o .build-mac/libFolloCore.dylib Sources/FolloCore/*.swift
 swiftc $FLAGS -I .build-mac -L .build-mac -lFolloCore -Xlinker -rpath -Xlinker "$PWD/.build-mac" Sources/follosim/main.swift -o .build-mac/follosim
-swiftc $FLAGS -I .build-mac -typecheck ../Follo/Follo/LiveCameraRunner.swift ../Follo/Follo/HighlightsRunner.swift
-echo "built .build-mac/follosim (and type-checked LiveCameraRunner.swift, HighlightsRunner.swift)"
+swiftc $FLAGS -I .build-mac -typecheck ../Follo/Follo/LiveCameraRunner.swift ../Follo/Follo/HighlightsRunner.swift ../Follo/Follo/MatchStore.swift
+echo "built .build-mac/follosim (and type-checked LiveCameraRunner, HighlightsRunner, MatchStore)"

@@ -33,7 +33,8 @@ public final class LiveCamera {
         self.W = Double(W); self.H = Double(H); self.fps = fps; self.fmd = fmd; self.top = top; self.bot = bot; C = config
         B = Int((bufferS * fps).rounded()); win = Int(C.confirmS * fps); fut = min(B, win)
         sig = C.smoothS * fps; P = Int(3 * sig)
-        lg = LiveGoals(fmask: fmd, sampleDt: Double(C.playerEvery) / fps, centre: C.mirror ? centre : nil); nextG = C.goalMinDataS * fps
+        lg = LiveGoals(fmask: fmd, sampleDt: Double(C.playerEvery) / fps, centre: C.mirror ? centre : nil, prior: C.goalsPrior); nextG = C.goalMinDataS * fps
+        if C.goalsPrior != nil { G = lg.mirrored(); goalsFirstS = 0 }
         pc = Pt(Double(W) / 2, Double(H) / 2); spread = Double(W) / 2
         ysm = Causal(Int(0.2 * fps)); zsm = Causal(Int(0.6 * fps)); msm = Causal(Int(0.5 * fps))
     }

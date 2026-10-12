@@ -23,6 +23,8 @@ final class LiveCameraRunner {
     private(set) var ballPasses = 0, ballFound = 0
     var goalsKnown: Bool { cam?.goals != nil }
     var isLive: Bool { cam != nil }
+    private(set) var knownPitch = false
+    static var pitchesURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("pitches.json") }
     var ballShare: Double { ballPasses > 0 ? Double(ballFound) / Double(ballPasses) : 0 }
 
     /// Position check: call with a frame every ~1.5 s while the setup screen is open (7 frames over 10 s).
@@ -42,7 +44,10 @@ final class LiveCameraRunner {
         let pl = try Detector(url: Bundle.main.url(forResource: "players", withExtension: "mlmodelc")!)
         let bd = try Detector(url: Bundle.main.url(forResource: "ball", withExtension: "mlmodelc")!)
         pipe = LivePipeline(W: env.W, H: env.H, fps: fps, fm: env.fm!, fmd: env.fmd, players: pl, ball: bd)
-        cam = LiveCamera(W: env.W, H: env.H, fps: fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: bufferS)
+        var cfg = CameraConfig()
+        cfg.goalsPrior = PitchMemory.load(Self.pitchesURL).compactMap { $0.prior(for: env) }.last    // пам'ять поля
+        knownPitch = cfg.goalsPrior != nil
+        cam = LiveCamera(W: env.W, H: env.H, fps: fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: bufferS, config: cfg)
         cam?.onFrame = { [weak self] f, fr in self?.emit(f, fr) }
         frame = 0; ring = [:]; ballPasses = 0; ballFound = 0
     }
@@ -51,7 +56,9 @@ final class LiveCameraRunner {
     func stop() -> (cam: LiveCamera, jerseys: [JerseySample])? {
         defer { pipe = nil; cam = nil; ring = [:] }
         guard let cam = cam, let pipe = pipe else { return nil }
-        cam.finish(); return (cam, pipe.jerseys)
+        cam.finish()
+        if let g = cam.goals, let e = env { PitchMemory.remember(PitchMemory(env: e, goals: g), in: Self.pitchesURL) }   // запам'ятати поле
+        return (cam, pipe.jerseys)
     }
 
     /// Thermal step (item 4): detect every 3rd frame instead of every 2nd when hot.

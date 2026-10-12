@@ -3,7 +3,7 @@ import CoreImage
 import FolloCore
 
 // follosim: run FolloCore on a recorded match on the Mac and compare with the Python simulator.
-//   follosim camera DIR B        DIR = work/mN/live (live_det.jsonl + env.json + fmd.png from `live_sim.py --dump`) → DIR/swift_B{B}.json
+//   follosim camera DIR B [--swift] [--prior x0,y0,x1,y1]   DIR = work/mN/live (live_det.jsonl + env.json + fmd.png from `live_sim.py --dump`) → DIR/swift_B{B}.json
 //   follosim env VIDEO DIR       field mask, content bounds, halfway line from the first 10 s → DIR/swift_env.json + swift_fm.png (compare with env.json)
 //   follosim detect VIDEO DIR [--models models/coreml]   Core ML detection + tracker on the whole video → DIR/swift_det.jsonl (+ swift_env.json); then `follosim camera DIR B --swift`
 //   follosim highlights DIR VIDEO [--swift] [--no-render]   highlights after Stop from the live path: kick-offs by jersey colour, clips 16:9 + 9:16 → DIR/swift_highlights/
@@ -18,7 +18,9 @@ case "camera":
     guard args.count >= 4, let B = Double(args[3]) else { die("usage: follosim camera DIR B") }
     let dir = args[2]; let swift = args.contains("--swift")      // --swift: Swift detections and environment instead of Python's
     let env = try! LiveEnv.load(dir: dir, prefix: swift ? "swift_" : "")
-    let cam = LiveCamera(W: env.W, H: env.H, fps: env.fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: B)
+    var cfg = CameraConfig()
+    if let i = args.firstIndex(of: "--prior") { let v = args[i + 1].split(separator: ",").map { Double($0)! }; cfg.goalsPrior = [Pt(v[0], v[1]), Pt(v[2], v[3])] }
+    let cam = LiveCamera(W: env.W, H: env.H, fps: env.fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: B, config: cfg)
     let t0 = Date(); var n = 0
     for line in try! String(contentsOfFile: dir + (swift ? "/swift_det.jsonl" : "/live_det.jsonl")).split(separator: "\n") {
         if let r = FrameRecord(jsonLine: String(line)) { cam.push(r); n += 1 }

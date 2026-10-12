@@ -10,5 +10,6 @@ public struct CameraConfig {
     public var anticipateS = 2.0, lostZoom = 1.35, confirmS = 0.6, confirmPx = 200.0
     public var mirror = true, goalHoldS = 2.0, borderShiftMax = 150
     public var playerEvery = 4
+    public var goalsPrior: [Pt]? = nil        // pitch memory: goals of an earlier match on this pitch
     public init() {}
 }

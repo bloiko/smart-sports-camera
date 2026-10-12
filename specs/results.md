@@ -213,6 +213,51 @@ What the phone does after Stop: moments from the live camera path (goal-mode epi
 - Jersey sampling density: every 20th frame missed the match 3 kick-off (peak 0.75), every 4th misses both (0.76–0.77); every 8th finds both at exactly the 0.77 threshold. The separation peaks of real kick-offs are 0.77–0.78 and the best false ones 0.69–0.75: **no margin**. Python and Swift differ by up to 0.1 in the separation curve (k-means on jersey colours starts at random; own Lab conversion), enough to flip the match 3 result. The kick-off criterion must become more robust before it labels goals on the phone (backlog 3c item 4).
 - Clip rendering: Swift and Python frames of the same clip compared visually (`work/m1/live_pre/clip_compare.jpg`); the Swift label is drawn with CoreImage text instead of OpenCV's Hershey font.
 
+## Live algorithms on the simulator (2026-10-12, backlog 3c item 4)
+
+### Live goals: drift to the corner flags, fixed with a y-guard (`LiveGoals(dy_max=60)`)
+
+Error of the live goal estimate vs the hand-measured goals (px, left / right as |Δx|, |Δy|) over time, cached live detections, `src/exp_livegoals.py`. The estimate only grows outward; corner kicks build heat at the corner flags and pull the tips there late in the match (on a 90-minute match always). The y-guard accepts an outward move only when the tip's y changes by ≤ 60 px (a corner pull is a jump in y; a better view of the goal moves the tip in x).
+
+| Match | Rule | 30 s | 60 s | 120 s | end |
+| --- | --- | --- | --- | --- | --- |
+| 1 | baseline | 480,35 / 421,5 | 119,21 / 55,9 | 18,50 / 45,10 | 35,48 / 45,10 |
+| 1 | y-guard 60 | same | same | 109,20 / 45,10 | 109,20 / 45,10 |
+| 2 | baseline | 56,38 / 22,68 | same | 187,3 / 22,68 | **185,249 / 335,279** |
+| 2 | y-guard 60 | 56,38 / 22,68 | same | same | 56,38 / 22,68 |
+| 3 | baseline | 127,123 / 59,10 | 127,121 / 58,12 | 1,93 / 58,12 | **1,93 / 199,295** |
+| 3 | y-guard 60 | same | same | 127,121 / 58,12 | 127,121 / 58,12 |
+
+Rejected: tips by column mass (≥ 5–20% of the busiest column), region threshold 6 s, the densest spot near each end (keeper + penalty area: 100–300 px too far inside). With the y-guard the camera checklist stays 7/7 and match 2 gets smoother (pan 98 → 86 px/s, jerk 307 → 261); ball in crop 93.5 → 95.0% (1), 91.8 → 92.3% (2), 77.8 → 75.7% (3). Swift port identical (SAME PATH on all three).
+
+### Goals before 30 s and pitch memory
+
+Without data nothing works: the first estimate at 10–20 s is 300–900 px off (match 2: L 368 / R 313 at 15 s), and `goal_min_data_s` = 15 or 20 drops the match 2 checklist to 1/4; it stays at 30 s. **Pitch memory** instead: matches 1 and 2 are the same stadium on different days with the camera in the same place (hand-measured goals within 13 px, halfway line within 6 px, field mask IoU 0.81 because of shadows). With the final estimate of match 1 as the prior for match 2 (`--set goals_prior=…`, `PitchMemory.swift` in the app), goal mode works from the first second: the 0:13.5 attack gets a highlight clip (before: no episode, since goals were unknown), checklist 4/4, Swift identical. Matching rule in the app: same frame size, mask IoU ≥ 0.75, halfway line ends within 30 px.
+
+### Kick-off (goal) signal: no margin found
+
+`src/exp_kickoff.py` on the jersey samples of all three matches (real kick-offs at 195 s in match 1 and 148 s in match 3; best false peak at least 20 s from them):
+
+| Statistic | Real kick-offs | Best false | Margin |
+| --- | --- | --- | --- |
+| current: mean of team separation over 2 s | 0.77, 0.77 | 0.75 | +0.02 |
+| min of the two teams' shares, 2 s | 0.74, 0.66 | 0.65 | +0.02 |
+| 1 s / 3 s median / 4 s windows | — | — | −0.01 / −0.02 / +0.00 |
+| product of the shares, 2 s | 0.59, 0.58 | 0.53 | +0.05 |
+| separation × player stillness (median displacement between player frames) | — | — | ≤ +0.02 (players also stand still at throw-ins and fouls; detection jitter 3–5 px) |
+
+Conclusion: team separation from live detections cannot label goals reliably; the GOAL label needs another cue (owner question: the crowd/bench noise after a goal from the phone's microphone, the ball at the centre spot after a goal-area episode, or the user confirming the goal in the result screen).
+
+### Ball search in the evening match (match 3), detection rerun with phone budget
+
+| Variant | Ball found (passes) | Ball in crop | Checklist | Cost |
+| --- | --- | --- | --- | --- |
+| baseline (2 ROIs while lost, conf 0.4) | 8.5% | 75.7% | 2/2 | — |
+| 3 ROIs while lost | 11.4% | 77.1% | 2/2 | +1 ball pass (≈ 14 ms on the Mac) per lost frame |
+| conf 0.3 while searching | 11.7% | 75.7% | 2/2 | more false candidates, no gain in crop |
+
+Neither is switched on: the evening match needs a better ball detector (model v0.3 on the three matches, backlog P1), not a wider search.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

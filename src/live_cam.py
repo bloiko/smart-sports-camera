@@ -45,9 +45,11 @@ class LiveCamera:
         self.W, self.H, self.fps, self.fmd, self.top, self.bot, self.C = W, H, fps, fmd, top, bot, C
         self.B = int(round(B_s * fps)); self.win = int(C['confirm_s'] * fps); self.fut = min(self.B, self.win)
         self.sig = C['smooth_s'] * fps; self.P = int(3 * self.sig)
-        self.lg = LiveGoals(fmd, PLAYER_EVERY / fps, centre=cline); self.G = None; self.next_g = C['goal_min_data_s'] * fps
+        prior = C.get('goals_prior')      # пам'ять поля: ворота з попереднього матчу на цьому ж полі
+        self.lg = LiveGoals(fmd, PLAYER_EVERY / fps, centre=cline, prior=prior); self.G = None; self.next_g = C['goal_min_data_s'] * fps
         self.depth = [150.0, 700.0]; self.rows = 0; self.ys = []
-        self.pc, self.spread = (W / 2, H / 2), W / 2; self.zone_hist = [[], []]; self.zn = [0, 0]
+        self.pc, self.spread = (W / 2, H / 2), W / 2; self.zone_hist = [[], []]; self.zn = [0, 0]; self.goals_first = None
+        if prior is not None: self.G = [tuple(map(float, g)) for g in self.lg.mirrored()]; self.goals_first = 0.0
         self.S = []            # per frame: (pc, spread, zn, base, G)
         self.balls = []        # (frame, (x, y))
         self.goals_at = []     # per frame: G or None
@@ -56,7 +58,7 @@ class LiveCamera:
         self.X1, self.Y1, self.CW1 = [], [], []                            # stage-1 outputs (speed limit reference)
         self.X, self.Y, self.CW, self.CH, self.GON, self.GIo, self.BX, self.BY = [], [], [], [], [], [], [], []
         self.ysm, self.zsm, self.msm = Causal(int(0.2 * fps)), Causal(int(0.6 * fps)), Causal(int(0.5 * fps))
-        self.goals_first = None; self.pushed = -1
+        self.pushed = -1
         self.PF = []           # (frame, field players) of every player frame: zone counts for highlights after Stop
 
     # ---------------------------------------------------------------- input

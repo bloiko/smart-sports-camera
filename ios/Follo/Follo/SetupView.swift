@@ -1,4 +1,6 @@
 import SwiftUI
+import Combine
+import FolloCore
 import AVFoundation
 
 struct CameraPreview: UIViewRepresentable {
@@ -112,21 +114,21 @@ struct SetupView: View {
     func stop() {
         let startedAtSaved = startedAt ?? Date()
         cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil)
-        let live = ls.runner.stop(); let env = ls.runner.env
+        let camOut = ls.runner.stop(); let env = ls.runner.env; let target = live
         result = true; clips = []; hlProgress = "Готую хайлайти…"
         // хайлайти з записаних файлів у фоні (≈ 1–2 хв): кікоф → гол, кліпи 16:9 і 9:16
         DispatchQueue.global(qos: .userInitiated).async {
             let chunks = ((try? FileManager.default.contentsOfDirectory(at: ChunkWriter.dir, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "mp4" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
             var out: [HighlightsRunner.Clip] = []
-            if let (c, j) = live, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
+            if let (c, j) = camOut, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
             DispatchQueue.main.async {
                 clips = out; hlProgress = nil
-                MatchStore.add(MatchRecord(date: startedAtSaved, watchURL: live?.watchURL, durationS: Date().timeIntervalSince(startedAtSaved),
+                MatchStore.add(MatchRecord(date: startedAtSaved, watchURL: target?.watchURL, durationS: Date().timeIntervalSince(startedAtSaved),
                                            chunkFiles: chunks.map { $0.lastPathComponent }, clipFiles: out.map { $0.file.lastPathComponent },
                                            goals: out.filter { $0.kind == "goal" }.count, knownPitch: ls.runner.knownPitch))
             }
         }
-        if let l = live { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
+        if let l = target { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
         status = "Записано \(cam.chunkCount) файлів у Documents/chunks"
     }
 

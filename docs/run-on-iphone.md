@@ -4,15 +4,14 @@ Takes about 30 minutes the first time, 1 minute afterwards. Works with a normal 
 
 ## Once
 
-1. **Xcode**: Mac App Store → Xcode (free, ~12 GB). Open it once and let it install the iOS platform when asked.
+1. **Xcode**: Mac App Store → Xcode (free, ~12 GB). Open it once and let it install the iOS platform. In Terminal: `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
 2. **Apple ID in Xcode**: Xcode → Settings → Accounts → **+** → Apple ID → sign in. Your "Personal Team" appears.
-3. **Project**: File → New → Project → iOS → App. Product name `Follo`, Interface SwiftUI, Language Swift. Save it into `ios/Follo/` of this repository. Delete the generated `ContentView.swift` and `FolloApp.swift`, then drag all files from `ios/Follo/Follo/` into the project (tick "Copy items if needed" off: they are already there).
-4. **HaishinKit** (streaming library): File → Add Package Dependencies → paste `https://github.com/HaishinKit/HaishinKit.swift` → Add to target Follo.
-4a. **FolloCore** (the virtual camera, shared with the Mac simulator): File → Add Package Dependencies → Add Local… → choose `ios/FolloCore` → add the `FolloCore` library to target Follo.
-4b. **Core ML models**: run `.venv-export/bin/python src/export_coreml.py` on the Mac (see README), then drag `models/coreml/players.mlpackage` and `models/coreml/ball.mlpackage` into the Xcode project (target Follo ticked). Xcode compiles them to `players.mlmodelc` and `ball.mlmodelc`, which `LiveCameraRunner.swift` loads by name.
-5. **Signing**: project → target Follo → Signing & Capabilities → Team = your Personal Team; Bundle Identifier = `com.<yourname>.follo` (anything unique). Xcode creates the certificate.
-6. **Info**: target → Info → add `Privacy - Camera Usage Description` = "Records the match", `Privacy - Microphone Usage Description` = "Match audio". Optional for the YouTube test: `YT_TOKEN` = the `token` field from `secrets/token.json` (made by `python src/golive.py`; valid 1 hour).
-7. **iPhone**: Settings → Privacy & Security → Developer Mode → on (the phone restarts). Connect with a cable, tap "Trust".
+3. **Open the project**: `ios/FolloApp/FolloApp.xcodeproj` (already wired: sources, FolloCore package, HaishinKit, Core ML models, camera/microphone usage strings). Package resolution on first open takes a minute.
+4. **Signing**: project → target FolloApp → Signing & Capabilities → Team = your Personal Team. Bundle Identifier is `com.bohdanloiko.follo`; change it if Xcode says it is taken.
+5. Optional for the YouTube test: target → Info → add `YT_TOKEN` = the `token` field from `secrets/token.json` (made by `python src/golive.py`; valid 1 hour).
+6. **iPhone**: Settings → Privacy & Security → Developer Mode → on (the phone restarts). Connect with a cable, tap "Trust".
+
+Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme FolloApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
 
 ## Every time
 

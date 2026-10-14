@@ -53,7 +53,7 @@ Key fact: **iOS stops the camera as soon as the app leaves the screen.** Most ca
 
 ## Feature checklist (phase 5, ordered by priority)
 
-Status: ☐ not started, ◐ in progress, ☑ done.
+Status: ☐ not started, ◐ in progress, ☑ done. 2026-10-14: the whole app compiles in Xcode 27 for simulator and device (HaishinKit 2.x, RTMP module); not yet run on a phone.
 
 **Critical**
 - ◐ 8. RTMPS streaming (HaishinKit, code, untested) and Core ML virtual camera on the phone (done 2026-10-12: `ios/FolloCore` = Swift port of the live camera, identical path to Python on 3 matches; Core ML models exported; `LiveCameraRunner.swift` wires camera frames → detection → 2 s buffer → 1080p crop → streamer; not yet run on a phone)

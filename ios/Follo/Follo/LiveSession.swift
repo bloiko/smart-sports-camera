@@ -1,13 +1,14 @@
 import Foundation
 import AVFoundation
 import UIKit
+import Combine
 
 /// Стан ефіру, що переживає крах: broadcastId, ключ, час старту зберігаються в UserDefaults (пункт 3 «Відновити ефір?»).
 /// Нагрів і батарея (пункти 4, 6); перевірки перед стартом (пункт 7).
 @MainActor
 final class LiveSession: ObservableObject {
     struct Saved: Codable { var broadcastId: String; var rtmpsURL: String; var streamKey: String; var watchURL: String; var startedAt: Date }
-    @Published var saved: Saved? = Self.load()
+    @Published var saved: Saved? = LiveSession.load()
     @Published var warning: String?
     @Published var recordingStopped = false     // пункт 13: місця мало → запис зупинено, стрім триває
     let calls = CallWatcher()
@@ -37,7 +38,7 @@ final class LiveSession: ObservableObject {
         let t = ProcessInfo.processInfo.thermalState
         switch t {
         case .nominal, .fair: onFrameRate(30); onDetectEvery(2); warning = nil
-        case .serious: onFrameRate(25); streamer.bitrateKbps > 3000 ? streamer.stepBitrateDown() : (); onDetectEvery(3); warning = "Гаряче: знизив fps, стрім іде"
+        case .serious: onFrameRate(25); if streamer.bitrateKbps > 3000 { Task { await streamer.stepBitrateDown() } }; onDetectEvery(3); warning = "Гаряче: знизив fps, стрім іде"
         case .critical: onFrameRate(25); onDetectEvery(4); warning = "Дуже гаряче: постав телефон у тінь"
         @unknown default: break
         }

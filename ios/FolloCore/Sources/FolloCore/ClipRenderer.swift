@@ -1,5 +1,7 @@
 import Foundation
+import CoreText
 import AVFoundation
+import CoreText
 import CoreImage
 
 /// Renders a clip [t0, t1] of the source video along a camera path into an H.264 MP4 (1920×1080 or 1080×1920):

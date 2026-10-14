@@ -21,3 +21,8 @@ secrets/
 models/coreml/
 models/*.mlpackage
 .build-mac/
+# Xcode user state and Core ML copies (source of truth: models/coreml)
+ios/**/xcuserdata/
+ios/FolloApp/FolloApp/*.mlpackage
+ios/FolloCore/.build-mac/
+.DS_Store

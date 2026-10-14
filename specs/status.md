@@ -146,7 +146,7 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 ## Phase 3: iOS app (started 2026-10-12)
 
-**Status:** skeleton in `ios/` (4K ultra-wide chunked recording, setup/live screen, YouTube Live API call); not compiled yet, the owner installs Xcode. Design mockup of all 10 screens: `docs/app-design.md`.
+**Status:** Xcode project `ios/FolloApp` compiles for simulator and device (2026-10-14, Xcode 27); sources in `ios/Follo/Follo` are copied into it (keep both in sync). Not yet run on a phone. Design mockup of all 10 screens: `docs/app-design.md`.
 
 **Done (code only, not compiled: no Xcode on the Mac yet):** chunked 4K recording, YouTube Live API, RTMPS streamer with 60 s buffer and reconnect to the same broadcast, resume after crash, thermal and battery steps, adaptive bitrate, preflight checks, hold-to-stop. Docs: `docs/app-design.md`, `docs/live-edge-cases.md`, `docs/run-on-iphone.md`, `docs/youtube-live.md`.
 

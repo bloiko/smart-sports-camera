@@ -1,9 +1,11 @@
 import Foundation
+import Combine
 import AVFoundation
-import HaishinKit   // SPM: https://github.com/HaishinKit/HaishinKit.swift (BSD-3)
+import HaishinKit        // SPM: https://github.com/HaishinKit/HaishinKit.swift (BSD-3), 2.x
+import RTMPHaishinKit    // RTMP lives in its own module since 2.0
 
 /// RTMPS-стрім 1080p на YouTube з буфером і перепідключенням до тієї самої трансляції.
-/// Кадри (CVPixelBuffer 1920×1080 після віртуальної камери) надходять у push(); аудіо — з мікрофона HaishinKit.
+/// Кадри (CVPixelBuffer 1920×1080 після віртуальної камери) надходять у push(); аудіо — з мікрофона через MediaMixer.
 /// Обрив мережі: кадри накопичуються в буфері до bufferSeconds, кожні 2 с спроба reconnect з тим самим ключем.
 @MainActor
 final class Streamer: ObservableObject {
@@ -14,36 +16,52 @@ final class Streamer: ObservableObject {
 
     private let conn = RTMPConnection()
     private lazy var stream = RTMPStream(connection: conn)
+    private let mixer = MediaMixer(captureSessionMode: .multi)
     private var url = "", key = ""
     private var buffer: [(CVPixelBuffer, CMTime)] = []
     private let bufferSeconds = 60.0
     private var reconnectTask: Task<Void, Never>?
+    private var statusTask: Task<Void, Never>?
     private var fps = 30.0
-    private let bitrateSteps = [4500, 3000, 2000]        // Мбіт/с × 1000; 2000 → 720p
+    private let bitrateSteps = [4500, 3000, 2000]        // кбіт/с; 2000 → 720p
 
     func start(url: String, key: String) async {
         self.url = url; self.key = key
-        stream.videoSettings = .init(videoSize: .init(width: 1920, height: 1080), bitRate: bitrateKbps * 1000,
-                                     profileLevel: kVTProfileLevel_H264_High_AutoLevel as String, maxKeyFrameIntervalDuration: 2)
-        stream.frameRate = fps
-        stream.audioSettings = .init(bitRate: 128_000)
-        try? stream.attachAudio(AVCaptureDevice.default(for: .audio))
-        conn.addEventListener(.rtmpStatus, selector: #selector(onStatus), observer: self)
+        try? await stream.setVideoSettings(videoSettings())
+        try? await stream.setAudioSettings(AudioCodecSettings(bitRate: 128_000))
+        // аудіо з мікрофона: mixer → stream; відео ми подаємо самі через push()
+        try? await mixer.attachAudio(AVCaptureDevice.default(for: .audio))
+        await mixer.addOutput(stream)
+        await mixer.startRunning()
+        statusTask = Task { [weak self] in
+            guard let self else { return }
+            for await st in await conn.status {
+                switch st.code {
+                case "NetConnection.Connect.Success": break
+                case "NetConnection.Connect.Closed", "NetConnection.Connect.Failed": self.scheduleReconnect()
+                default: break
+                }
+            }
+        }
         await connect()
     }
 
-    private func connect() async {
-        state = state == .idle ? .connecting : state
-        conn.connect(url)                     // rtmps://a.rtmps.youtube.com:443/live2
-        stream.publish(key)
+    private func videoSettings() -> VideoCodecSettings {
+        let size: CGSize = bitrateKbps <= 2000 ? .init(width: 1280, height: 720) : .init(width: 1920, height: 1080)
+        return VideoCodecSettings(videoSize: size, bitRate: bitrateKbps * 1000,
+                                  profileLevel: kVTProfileLevel_H264_High_AutoLevel as String,
+                                  maxKeyFrameIntervalDuration: 2, expectedFrameRate: fps)
     }
 
-    @objc private func onStatus(_ n: Notification) {
-        guard let e = Event.from(n), let data = e.data as? ASObject, let code = data["code"] as? String else { return }
-        switch RTMPConnection.Code(rawValue: code) {
-        case .connectSuccess: state = .live; reconnectTask?.cancel(); flushBuffer()
-        case .connectClosed, .connectFailed: scheduleReconnect()
-        default: break
+    private func connect() async {
+        if state == .idle { state = .connecting }
+        do {
+            _ = try await conn.connect(url)              // rtmps://a.rtmps.youtube.com:443/live2
+            _ = try await stream.publish(key)
+            state = .live; reconnectTask?.cancel(); reconnectTask = nil
+            await flushBuffer()
+        } catch {
+            scheduleReconnect()
         }
     }
 
@@ -55,7 +73,8 @@ final class Streamer: ObservableObject {
             while let self, self.state != .ended, !Task.isCancelled {
                 attempt += 1; self.state = .reconnecting(attempt: attempt)
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
-                if attempt % 5 == 0 { self.stepBitrateDown() }     // пункт 5: слабкий інтернет → менший бітрейт
+                if attempt % 5 == 0 { await self.stepBitrateDown() }   // пункт 5: слабкий інтернет → менший бітрейт
+                try? await self.conn.close()
                 await self.connect()
                 if self.state == .live { break }
             }
@@ -66,7 +85,8 @@ final class Streamer: ObservableObject {
     /// Пункт 2: буфер кадрів до 60 с на час обриву.
     func push(_ pixelBuffer: CVPixelBuffer, at time: CMTime) {
         if state == .live {
-            stream.append(CMSampleBuffer.from(pixelBuffer, time: time))
+            let sb = CMSampleBuffer.from(pixelBuffer, time: time)
+            Task { await stream.append(sb) }
         } else {
             buffer.append((pixelBuffer, time))
             let limit = Int(bufferSeconds * fps)
@@ -74,25 +94,24 @@ final class Streamer: ObservableObject {
         }
     }
 
-    private func flushBuffer() {
-        for (pb, t) in buffer { stream.append(CMSampleBuffer.from(pb, time: t)) }
-        buffer.removeAll()
+    private func flushBuffer() async {
+        let pending = buffer; buffer.removeAll()
+        for (pb, t) in pending { await stream.append(CMSampleBuffer.from(pb, time: t)) }
     }
 
-    func stepBitrateDown() {
+    func stepBitrateDown() async {
         if let i = bitrateSteps.firstIndex(of: bitrateKbps), i + 1 < bitrateSteps.count {
             bitrateKbps = bitrateSteps[i + 1]
-            let size: CGSize = bitrateKbps <= 2000 ? .init(width: 1280, height: 720) : .init(width: 1920, height: 1080)
-            stream.videoSettings.bitRate = bitrateKbps * 1000; stream.videoSettings.videoSize = size
+            try? await stream.setVideoSettings(videoSettings())
         }
     }
 
     /// Пункт 4: нагрів → 25 fps.
-    func setFrameRate(_ f: Double) { fps = f; stream.frameRate = f }
+    func setFrameRate(_ f: Double) { fps = f; Task { try? await stream.setVideoSettings(videoSettings()) } }
 
     func stop() {
-        state = .ended; reconnectTask?.cancel()
-        stream.close(); conn.close()
+        state = .ended; reconnectTask?.cancel(); statusTask?.cancel()
+        Task { _ = try? await stream.close(); try? await conn.close(); await mixer.stopRunning() }
     }
 }
 

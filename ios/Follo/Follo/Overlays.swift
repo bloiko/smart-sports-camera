@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AVFoundation
 
 /// Пункт 11: екран темніє через 10 с без дотику; будь-який дотик повертає. Стрім і запис тривають.

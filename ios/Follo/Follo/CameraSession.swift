@@ -1,4 +1,6 @@
 import AVFoundation
+import UIKit
+import CoreImage
 import Combine
 
 /// 4K 30 fps з ультраширокої камери, запис файлами по chunkSeconds, кадри для нейромережі через delegate.
@@ -9,36 +11,56 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var chunkCount = 0
     @Published var frameHandler: ((CMSampleBuffer) -> Void)?
+    @Published var previewImage: UIImage?
+    private var previewCount = 0
+    private let previewCtx = CIContext(options: [.cacheIntermediates: false])
     let chunkSeconds: Double = 180
 
+    @Published var cameraError: String?
+
     func configure() {
-        queue.async {
-            self.session.beginConfiguration()
-            self.session.sessionPreset = .inputPriority
-            guard let dev = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back),
-                  let input = try? AVCaptureDeviceInput(device: dev) else { self.session.commitConfiguration(); return }
-            if self.session.canAddInput(input) { self.session.addInput(input) }
-            // формат 3840×2160 @30
-            if let fmt = dev.formats.first(where: { f in
-                let d = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
-                return d.width == 3840 && f.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 30 }
-            }) {
-                try? dev.lockForConfiguration()
+        AVCaptureDevice.requestAccess(for: .video) { ok in
+            guard ok else { DispatchQueue.main.async { self.cameraError = "Немає дозволу на камеру: Параметри → Follo → Камера" }; return }
+            self.queue.async { self.setup() }
+        }
+    }
+
+    private func setup() {
+        session.beginConfiguration()
+        session.sessionPreset = .inputPriority
+        let dev = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+        guard let dev, let input = try? AVCaptureDeviceInput(device: dev) else {
+            session.commitConfiguration(); DispatchQueue.main.async { self.cameraError = "Камеру не знайдено" }; return
+        }
+        if session.canAddInput(input) { session.addInput(input) }
+        // найбільший формат до 3840 px шириною з 30 fps (4K на ультраширокій є не на всіх моделях)
+        let fmts = dev.formats.filter { f in
+            let d = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+            return d.width <= 3840 && f.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 30 }
+                && CMFormatDescriptionGetMediaSubType(f.formatDescription) == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        }
+        if let fmt = fmts.max(by: { CMVideoFormatDescriptionGetDimensions($0.formatDescription).width < CMVideoFormatDescriptionGetDimensions($1.formatDescription).width }) {
+            do {
+                try dev.lockForConfiguration()
                 dev.activeFormat = fmt
                 dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
                 dev.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 30)
                 dev.unlockForConfiguration()
-            }
-            let out = AVCaptureVideoDataOutput()
-            out.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
-            out.alwaysDiscardsLateVideoFrames = true
-            out.setSampleBufferDelegate(self, queue: self.queue)
-            if self.session.canAddOutput(out) { self.session.addOutput(out) }
-            out.connection(with: .video)?.videoRotationAngle = 0
-            self.session.commitConfiguration()
-            self.session.startRunning()
+            } catch { DispatchQueue.main.async { self.cameraError = "Формат: \(error.localizedDescription)" } }
         }
+        let out = AVCaptureVideoDataOutput()
+        out.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
+        out.alwaysDiscardsLateVideoFrames = true
+        out.setSampleBufferDelegate(self, queue: queue)
+        if session.canAddOutput(out) { session.addOutput(out) }
+        if let c = out.connection(with: .video), c.isVideoRotationAngleSupported(0) { c.videoRotationAngle = 0 }
+        session.commitConfiguration()
+        session.startRunning()
+        let d = CMVideoFormatDescriptionGetDimensions(dev.activeFormat.formatDescription)
+        DispatchQueue.main.async { self.cameraError = self.session.isRunning ? nil : "Камера не запустилась"; self.formatInfo = "\(dev.localizedName) \(d.width)×\(d.height)" }
     }
+    @Published var formatInfo = ""
 
     func startRecording() {
         queue.async {
@@ -59,6 +81,11 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         writer?.append(sampleBuffer)
         frameHandler?(sampleBuffer)
+        previewCount += 1
+        if previewCount % 6 == 0, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {   // прев'ю 5 fps, 960 px
+            let ci = CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.25, y: 0.25))
+            if let cg = previewCtx.createCGImage(ci, from: ci.extent) { let ui = UIImage(cgImage: cg); DispatchQueue.main.async { self.previewImage = ui } }
+        }
     }
 }
 

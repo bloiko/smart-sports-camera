@@ -11,7 +11,7 @@ let package = Package(
         .executable(name: "follosim", targets: ["follosim"]),
     ],
     targets: [
-        .target(name: "FolloCore"),
+        .target(name: "FolloCore", swiftSettings: [.unsafeFlags(["-O"])]),   // піксельний код: без -O у Debug в 20–50× повільніший
         .executableTarget(name: "follosim", dependencies: ["FolloCore"]),
     ]
 )

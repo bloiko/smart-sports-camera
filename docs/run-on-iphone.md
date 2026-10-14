@@ -32,3 +32,7 @@ Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme Follo
 - "Could not launch": Developer Mode is off (step 7).
 - Build errors in Swift files: send the first red line to Claude. `ios/FolloCore` and `LiveCameraRunner.swift` compile on the Mac (`ios/FolloCore/build_mac.sh`); the UIKit files (`SetupView`, `Streamer`, `CameraSession`, `LiveSession`) were written without compiling.
 - "Camera: … models players/ball.mlmodelc" at Go live: step 4b was skipped.
+
+## Testing at home without a pitch
+
+`python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac. Put the phone on a tripod 60–80 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.

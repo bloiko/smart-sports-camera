@@ -3,13 +3,17 @@ import Combine
 import FolloCore
 import AVFoundation
 
-struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
-    func makeUIView(context: Context) -> UIView {
-        let v = UIView(); let l = AVCaptureVideoPreviewLayer(session: session)
-        l.videoGravity = .resizeAspect; v.layer.addSublayer(l); return v
+/// Прев'ю до ефіру: кадр з камери → UIImage (5 fps). AVCaptureVideoPreviewLayer і AVSampleBufferDisplayLayer
+/// на цій сесії (ручний 4K-формат, NV12) на iPhone 15 нічого не показували.
+struct CameraPreview: View {
+    @ObservedObject var cam: CameraSession
+    var body: some View {
+        ZStack {
+            Color.black
+            if let img = cam.previewImage { Image(uiImage: img).resizable().scaledToFit() }
+            else { Text("Камера…").foregroundStyle(.secondary) }
+        }
     }
-    func updateUIView(_ v: UIView, context: Context) { v.layer.sublayers?.first?.frame = v.bounds }
 }
 
 struct SetupView: View {
@@ -36,10 +40,10 @@ struct SetupView: View {
                 Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)); Spacer()
             }
             if viewer && cam.isRecording {
-                ViewerView(runner: ls.runner).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+                ViewerView(runner: ls.runner).frame(maxWidth: .infinity).frame(height: 200).clipShape(RoundedRectangle(cornerRadius: 14))
                 Text("Так бачить глядач (без затримки YouTube). Не виходь із застосунку: камера зупиниться — дивись трансляцію на іншому телефоні.").font(.caption2).foregroundStyle(.secondary)
             } else {
-                CameraPreview(session: cam.session).aspectRatio(16/9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+                CameraPreview(cam: cam).frame(maxWidth: .infinity).frame(height: 200).clipShape(RoundedRectangle(cornerRadius: 14))
             }
             if cam.isRecording { Toggle("Погляд глядача", isOn: $viewer).font(.footnote) }
             HStack {
@@ -53,7 +57,8 @@ struct SetupView: View {
                     Button("Копіювати") { UIPasteboard.general.string = l.watchURL } }
                     .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            Text(error ?? status).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Text(error ?? cam.cameraError ?? status).font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
+            if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
             Spacer()
             if let w = ls.warning { Text(w).font(.footnote).foregroundStyle(.yellow) }
             if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
@@ -85,7 +90,7 @@ struct SetupView: View {
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
-            else if error == nil { status = ls.runner.env == nil ? "Перевіряю позицію (10 с)…" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
+            else if error == nil { status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
         }
     }
 

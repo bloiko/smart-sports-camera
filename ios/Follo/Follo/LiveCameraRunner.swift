@@ -14,6 +14,8 @@ final class LiveCameraRunner {
     private let ctx = CIContext(options: [.cacheIntermediates: false])
     private var frame = 0
     private var preroll: [(Double, Image8)] = []
+    private(set) var prerollCount = 0, building = false
+    private let envQueue = DispatchQueue(label: "follo.env", qos: .userInitiated)
     var fps = 30.0
     /// Output crop (1920×1080) with the capture time of its source frame.
     var onOutput: ((CVPixelBuffer, CMTime) -> Void)?
@@ -34,7 +36,14 @@ final class LiveCameraRunner {
         let w = CVPixelBufferGetWidth(pb) / 2, h = CVPixelBufferGetHeight(pb) / 2
         guard let small = render(CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5)), w: w, h: h, pool: nil) else { return }
         preroll.append((time, Image8(bgra: small))); if preroll.count > 7 { preroll.removeFirst() }
-        if preroll.count == 7 { env = LiveEnv.make(frames: preroll.map { $0.1 }, fps: fps).scaled(2) }
+        prerollCount = preroll.count
+        if preroll.count == 7, !building, env == nil {      // маска поля і центральна лінія — не на черзі камери (секунди)
+            building = true; let frames = preroll.map { $0.1 }; let f = fps
+            envQueue.async { [weak self] in
+                let e = LiveEnv.make(frames: frames, fps: f).scaled(2)
+                DispatchQueue.main.async { self?.env = e; self?.building = false }
+            }
+        }
     }
 
     /// Start the live camera once the position check is fine. Models: players.mlmodelc and ball.mlmodelc in the bundle

@@ -269,6 +269,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X93QTR3BUW;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -309,6 +310,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X93QTR3BUW;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -395,7 +397,7 @@
 		};
 		A00000000000000000000203 /* RTMPHaishinKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A00000000000000000000102 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */;
+			package = A00000000000000000000102 /* XCRemoteSwiftPackageReference "HaishinKit" */;
 			productName = RTMPHaishinKit;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -34,6 +34,15 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
 - **Ideas:** re-tune `goal_attack_n` and `goal_zone` once more goals are listed; check on the owner's phone footage (no curved borders); refine automatic goals with post detection near the estimate when confident.
 - **Done when:** every listed goal and shot passes, and the owner watches the goal moments without irritation.
 
+### 3d. Camera quality on the phone (owner, 2026-10-15)
+1. **Static ball look-alike next to players** (match 2, Core ML, (2974, 201)): goal mode at 1:02.3 starts 1.2 s late; the last Core ML checklist failure (6/7). The 3 s static rule needs no player near; this one has players near. Idea: count repeated detections at the same spot over the whole match, not only consecutive ones.
+2. **Smoothness:** ~1.6% of frames still move > 20 px. Damp quick turns while the ball is lost for under a second (hold, then ease), check that shots still stay in frame (checklist).
+3. **Player-model input for the phone's 16:9 4K frame:** the export is 1280×672 for the 4096×1084 panoramas; a 3840×2160 frame needs its own tile size (letterboxing loses players, 76.5% matched on 3840×1504). Do before the first real match.
+
+### 3e. Scoreboard on the stream (owner, 2026-10-15)
+- **Done 2026-10-15:** score bug burned into the 1080p stream, top left (team colour, name, score, match clock); "Команди" before the game (name, jersey colour from 10 swatches, show/hide); during the game big +/− for each team, hold the clock to restart it at kick-off; state survives a crash. Code: `FolloCore/Scoreboard.swift`, app `ScoreViews.swift`; look on the Mac: `follosim scoreboard OUT.png`. Checked on the phone with the test video.
+- **Next:** suggest jersey colours automatically from the colours sampled in the first minutes (`Jersey.samples`), the owner only confirms; propose "Goal for …?" when the camera's goal mode sees a likely goal (one tap to accept, never automatic); the score in the highlight clips; half-time (clock pause, 2nd half from 45:00).
+
 ### 3b. Live: next steps
 - Measure YOLO11n/s Core ML on the iPhone 15 (1 vs 2 tiles at 1280, ball tile at 640) — decides the real detection budget.
 - Live ball search for evening / pale grass (match 3 ball in crop 74%): ball candidates from player motion, a second ball model pass when lost.

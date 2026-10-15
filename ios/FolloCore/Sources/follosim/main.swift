@@ -1,3 +1,4 @@
+import ImageIO
 import Foundation
 import CoreImage
 import FolloCore
@@ -14,6 +15,12 @@ func die(_ s: String) -> Never { FileHandle.standardError.write((s + "\n").data(
 guard args.count >= 2 else { die("usage: follosim camera DIR B") }
 
 switch args[1] {
+case "scoreboard":   // follosim scoreboard OUT.png — the score bug as the stream shows it (for a look on the Mac)
+    var st = ScoreState(home: ScoreTeam(name: "Tsukuba", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "Kyiv United FC", r: 0.1, g: 0.35, b: 0.9))
+    st.homeGoals = 2; st.awayGoals = 1
+    let img = Scoreboard.render(st, clock: Scoreboard.clock(37 * 60 + 12))!
+    let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst); print("\(img.width)×\(img.height) → \(args[2])")
 case "position":   // follosim position work/mN/live_pre — the Go live position check on a saved environment
     let e = try LiveEnv.load(dir: args[2])
     let fb = e.fm?.farBand

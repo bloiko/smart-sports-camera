@@ -25,6 +25,10 @@ Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSc
 
 In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position check inside the setup screen), 6, 7, 7b, 7c (viewer view), 8, 9 (play and share per clip; no "not a goal" button yet). Missing: 10 settings.
 
+## Scoreboard (2026-10-15)
+
+The stream shows a TV-style score bug in the top left corner of the 1080p picture: colour stripe of each team, short name (12 characters), score, match clock. Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has a score bar with big − and + per team (a wrong tap is undone with −), and holding the clock restarts it at the kick-off whistle. A new Go live starts at 0:0; resuming after a crash keeps the score.
+
 ## Name
 
 Working name **Follo** (follow the game): short, reads the same in Ukrainian and English, works as a verb, neutral across sports. Motto on the splash screen: "Follo the match." Known clashes to check before publishing: several unrelated "Follo" apps in the stores (construction logistics, finance, healthcare), the Follo region in Norway and its football club, the follo.com domain. Store title should be "Follo: AI sports camera"; domain candidates follo.cam, getfollo.com. Previous working name PitchCam was dropped because of PitchCom/PitchVision/Pitchcam in sports.

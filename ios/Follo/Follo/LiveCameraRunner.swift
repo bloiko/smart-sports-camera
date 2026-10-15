@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreImage
+import ImageIO
 import FolloCore
 
 /// The virtual camera on the phone: camera frames → Core ML detection (LivePipeline) → LiveCamera (buffer B s) →
@@ -110,6 +111,13 @@ final class LiveCameraRunner {
     }
 
     private var pathLog: FileHandle?
+    private let overlayLock = NSLock()
+    private var overlay: CIImage?
+    /// Табло (Scoreboard.render) у лівому верхньому куті кадру 1920×1080; nil — сховати. Викликати з головного потоку.
+    func setScoreboard(_ img: CGImage?) {
+        let ci = img.map { CIImage(cgImage: $0).transformed(by: CGAffineTransform(translationX: CGFloat(Scoreboard.margin), y: CGFloat(1080 - Scoreboard.margin - $0.height))) }
+        overlayLock.lock(); overlay = ci; overlayLock.unlock()
+    }
     private func emit(_ f: Int, _ fr: LiveCamera.Frame) {
         guard let (src, t) = ring.removeValue(forKey: f) else { return }
         let b = fr.ball.map { String(format: "%.1f,%.1f", $0.x, $0.y) } ?? ","
@@ -119,8 +127,20 @@ final class LiveCameraRunner {
         let rect = CGRect(x: fr.x - fr.cw / 2, y: H - (fr.y + fr.ch / 2), width: fr.cw, height: fr.ch)   // CoreImage: origin bottom-left
         var img = CIImage(cvPixelBuffer: src).cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
         img = img.transformed(by: CGAffineTransform(scaleX: 1920 / fr.cw, y: 1080 / fr.ch))
+        overlayLock.lock(); let bug = overlay; overlayLock.unlock()
+        if let bug { img = bug.composited(over: img) }                       // табло рахунку в кадрі трансляції
         if outPool == nil { outPool = Self.pool(w: 1920, h: 1080, format: kCVPixelFormatType_32BGRA, count: 6) }
-        if let out = render(img, w: 1920, h: 1080, pool: outPool) { outFrames += 1; onOutput?(out, t); onPreview?(out, t) }
+        if let out = render(img, w: 1920, h: 1080, pool: outPool) {
+            outFrames += 1; onOutput?(out, t); onPreview?(out, t)
+            if outFrames % 250 == 1 { saveDebugFrame(img) }               // debug: кадр трансляції раз на 10 с → Documents/debug/output.jpg
+        }
+    }
+
+    private func saveDebugFrame(_ img: CIImage) {
+        let u = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("debug/output.jpg")
+        let small = img.cropped(to: CGRect(x: 0, y: 0, width: 1920, height: 1080)).transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
+        guard let cg = ctx.createCGImage(small, from: small.extent), let d = CGImageDestinationCreateWithURL(u as CFURL, "public.jpeg" as CFString, 1, nil) else { return }
+        CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary); CGImageDestinationFinalize(d)
     }
 
     private func copyFrame(_ pb: CVPixelBuffer) -> CVPixelBuffer? {

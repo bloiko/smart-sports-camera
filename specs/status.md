@@ -148,6 +148,8 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 **Status:** runs on the owner's iPhone 15 (iOS 27). Xcode project `ios/FolloApp`; sources in `ios/Follo/Follo` are copied into it (keep both in sync).
 
+**Done 2026-10-15 (scoreboard):** score bug on the stream (team colours, names, score, clock), +/− on the live screen; checked on the phone (`docs/app-design.md`).
+
 **Done 2026-10-15 (first runs on the phone):** camera, position check and a full live run (no YouTube yet) on the phone. A debug-only test-video source feeds a recorded match instead of the camera (`docs/run-on-iphone.md`). Match 2 on the phone: position check in 0.2 s, live at the full 25 fps in real time, memory flat at ~470 MB, goals found after ~40 s, thermal "ok" over 80 s. Fixed on the way: the position check failed real matches (now only the far quarter of the pitch must keep off the frame sides; m1–m3 pass), a 12 GB stream buffer of raw frames (capped at 2 s), a 1-second timer that never fired, a leak in the file reader. Design mockup of all 10 screens: `docs/app-design.md`.
 
 **Done (code only, not compiled: no Xcode on the Mac yet):** chunked 4K recording, YouTube Live API, RTMPS streamer with 60 s buffer and reconnect to the same broadcast, resume after crash, thermal and battery steps, adaptive bitrate, preflight checks, hold-to-stop. Docs: `docs/app-design.md`, `docs/live-edge-cases.md`, `docs/run-on-iphone.md`, `docs/youtube-live.md`.

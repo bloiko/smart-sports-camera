@@ -20,6 +20,8 @@ struct SetupView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject var cam = CameraSession()
     @StateObject var ls = LiveSession()
+    @StateObject var score = ScoreModel()                            // рахунок на трансляції
+    @State var showTeams = false
     @State var live: LiveTarget?
     @State var status = "Все поле в кадрі? Ворота з обох боків?"
     @State var error: String?
@@ -55,6 +57,12 @@ struct SetupView: View {
                 stat(thermalText, "телефон")
                 stat(startedAt.map { fmt(Date().timeIntervalSince($0)) } ?? "—", "у ефірі")
                 stat(startedAt != nil ? "\(Int(ls.runner.ballShare * 100))%" : "—", "м'яч")
+            }
+            if cam.isRecording { ScoreBar(score: score) }
+            else {
+                Button { showTeams = true } label: {
+                    HStack { Text("Команди"); Spacer(); Text("\(score.state.home.name) – \(score.state.away.name)").foregroundStyle(.secondary).lineLimit(1) }
+                }.font(.footnote).padding(10).background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
             if let l = live {
                 HStack { Text(l.watchURL).font(.footnote).lineLimit(1); Spacer()
@@ -93,6 +101,8 @@ struct SetupView: View {
         }
         .contentShape(Rectangle()).simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastTouch = Date() })
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
+        .sheet(isPresented: $showTeams) { TeamsSheet(score: score) { showTeams = false } }
+        .onChange(of: score.state) { _, _ in if startedAt != nil { score.push(to: ls.runner) } }
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
         .onAppear {
             DebugLog.reset()
@@ -121,6 +131,7 @@ struct SetupView: View {
             if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
                 DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB")
             }
+            if startedAt != nil { score.push(to: ls.runner) }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
                 status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
@@ -141,6 +152,8 @@ struct SetupView: View {
                     DebugLog.log("YouTube: Studio stream key")
                 }
                 else if live == nil { status = "Без YouTube: лише запис (додай Google Sign-In)" }
+                if !resume { score.newMatch() }
+                score.push(to: ls.runner)
                 cam.startRecording(); startedAt = resume ? ls.saved?.startedAt ?? Date() : Date()
                 if let l = live {
                     ls.save(.init(broadcastId: l.broadcastId, rtmpsURL: l.rtmpsURL, streamKey: l.streamKey, watchURL: l.watchURL, startedAt: startedAt!))

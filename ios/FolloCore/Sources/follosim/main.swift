@@ -49,10 +49,10 @@ case "scoreboards":   // follosim scoreboards DIR — every style in four states
     let states: [(String, Int, Int, ScoreExtras)] = [
         ("play", 1, 0, ScoreExtras(clock: "23:15", half: 1)), ("added", 2, 1, ScoreExtras(clock: "90:00", half: 2, added: 3)),
         ("break", 1, 1, ScoreExtras(clock: "45:00", half: 1, phase: "ПЕРЕРВА")), ("goal", 2, 1, ScoreExtras(clock: "67:42", half: 2, goalFor: 0))]
-    for style in ScoreStyle.allCases { for (name, h, a, ex) in states {
-        st.homeGoals = h; st.awayGoals = a
+    for (style, full) in ScoreStyle.allCases.map({ ($0, false) }) + [(.classic, true)] { for (name, h, a, var ex) in states {
+        st.homeGoals = h; st.awayGoals = a; ex.fullNames = full
         let img = Scoreboard.renderStyled(st, style: style, extras: ex)!
-        let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(args[2])/\(style.rawValue)_\(name).png") as CFURL, "public.png" as CFString, 1, nil)!
+        let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(args[2])/\(style.rawValue)\(full ? "full" : "")_\(name).png") as CFURL, "public.png" as CFString, 1, nil)!
         CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst)
     } }
     print("written to \(args[2])")

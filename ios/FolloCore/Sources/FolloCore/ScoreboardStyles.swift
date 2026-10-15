@@ -10,8 +10,9 @@ public enum ScoreStyle: String, Codable, CaseIterable { case classic, pill, stac
 /// instead of the clock ("ПЕРЕРВА"), and a banner under the bug ("ГОЛ!" + team) for a few seconds after a goal.
 public struct ScoreExtras {
     public var clock: String?, half: Int, added: Int?, phase: String?, goalFor: Int?   // goalFor: 0 home, 1 away
-    public init(clock: String?, half: Int = 1, added: Int? = nil, phase: String? = nil, goalFor: Int? = nil) {
-        self.clock = clock; self.half = half; self.added = added; self.phase = phase; self.goalFor = goalFor
+    public var fullNames: Bool                                                          // full club names instead of 3-letter codes
+    public init(clock: String?, half: Int = 1, added: Int? = nil, phase: String? = nil, goalFor: Int? = nil, fullNames: Bool = false) {
+        self.clock = clock; self.half = half; self.added = added; self.phase = phase; self.goalFor = goalFor; self.fullNames = fullNames
     }
 }
 
@@ -39,7 +40,7 @@ public extension Scoreboard {
         let h = 54.0, pad = 14.0, chip = 8.0
         let clockT = e.phase ?? e.clock ?? "", halfT = e.phase == nil ? "\(e.half)Т" : ""
         let cw = max(110, d.width(clockT, d.bold(26)) + d.width(halfT, d.reg(16)) + 3 * pad)
-        let hc = code(s.home.name), ac = code(s.away.name)
+        let hc = e.fullNames ? short(s.home.name) : code(s.home.name), ac = e.fullNames ? short(s.away.name) : code(s.away.name)
         let nameW = max(d.width(hc, d.bold(26)), d.width(ac, d.bold(26)), 56)
         let sc = "\(s.homeGoals) – \(s.awayGoals)", scW = d.width(sc, d.bold(28)) + 2 * pad
         let teamsW = chip + pad + nameW + pad + scW + pad + nameW + pad + chip

@@ -12,6 +12,8 @@ final class ScoreModel: ObservableObject {
     @Published var pausedAt: Double? { didSet { UserDefaults.standard.set(pausedAt, forKey: "score.pausedAt") } }
     @Published var half: Int { didSet { UserDefaults.standard.set(half, forKey: "score.half") } }
     @Published var halfMinutes: Int { didSet { UserDefaults.standard.set(halfMinutes, forKey: "score.halfMinutes") } }
+    @Published var added: Int { didSet { UserDefaults.standard.set(added, forKey: "score.added") } }      // доданий час, хв (0 — не показувати)
+    private var goalFor: Int?, goalUntil = Date.distantPast                                                   // банер «ГОЛ!» 6 с після +
     private var lastKey = ""
 
     init() {
@@ -20,6 +22,7 @@ final class ScoreModel: ObservableObject {
         pausedAt = UserDefaults.standard.object(forKey: "score.pausedAt") as? Double
         half = max(1, UserDefaults.standard.integer(forKey: "score.half"))
         halfMinutes = UserDefaults.standard.object(forKey: "score.halfMinutes") as? Int ?? 45
+        added = UserDefaults.standard.integer(forKey: "score.added")
     }
 
     /// Секунди на годиннику зараз (nil — годинник не запущено).
@@ -35,22 +38,25 @@ final class ScoreModel: ObservableObject {
         else { pausedAt = seconds ?? 0 }
     }
     /// Інший тайм: годинник ставиться на його початок (2-й — з тривалості тайму, 45:00); пауза зберігається.
-    func setHalf(_ h: Int) { half = h; setClock(Double((h - 1) * halfMinutes * 60)) }
+    func setHalf(_ h: Int) { half = h; added = 0; setClock(Double((h - 1) * halfMinutes * 60)) }
     private func save() { UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: "score.state") }
 
     /// Новий матч: 0:0, годинник з нуля. Назви і кольори лишаються з минулого разу.
-    func newMatch() { state.homeGoals = 0; state.awayGoals = 0; half = 1; pausedAt = nil; clockStart = Date() }
+    func newMatch() { state.homeGoals = 0; state.awayGoals = 0; half = 1; added = 0; pausedAt = nil; clockStart = Date() }
     func add(home: Bool, _ d: Int) {
         if home { state.homeGoals = max(0, state.homeGoals + d) } else { state.awayGoals = max(0, state.awayGoals + d) }
+        if d > 0 { goalFor = home ? 0 : 1; goalUntil = Date().addingTimeInterval(6) } else { goalUntil = .distantPast }
         DebugLog.log("score \(state.homeGoals):\(state.awayGoals)")
     }
 
     /// Раз на секунду і після кожної зміни: перемальовує табло, лише якщо текст змінився.
     func push(to runner: LiveCameraRunner) {
-        let clock = clockText
-        let key = "\(state)\(clock ?? "")"
+        // червоний блок годинника з таймом, повні назви клубів, +N доданого часу, ПЕРЕРВА на паузі, ГОЛ! 6 с
+        let ex = ScoreExtras(clock: seconds.map { Scoreboard.clock($0) }, half: half, added: added > 0 ? added : nil,
+                             phase: pausedAt != nil ? "ПЕРЕРВА" : nil, goalFor: Date() < goalUntil ? goalFor : nil, fullNames: true)
+        let key = "\(state)\(ex.clock ?? "")\(half)\(added)\(ex.phase ?? "")\(ex.goalFor ?? -1)"
         guard key != lastKey else { return }
-        lastKey = key; runner.setScoreboard(Scoreboard.render(state, clock: clock))
+        lastKey = key; runner.setScoreboard(Scoreboard.renderStyled(state, style: .classic, extras: ex))
     }
 }
 
@@ -145,6 +151,9 @@ struct ClockSheet: View {
                     }.frame(height: 140)
                     Button("Встановити \(minutes):\(String(format: "%02d", secs))") { score.setClock(Double(minutes * 60 + secs)); done() }
                     Button("Почати тайм з нуля") { score.setClock(Double((score.half - 1) * score.halfMinutes * 60)); done() }
+                }
+                Section("Доданий час") {
+                    Stepper(score.added == 0 ? "Не показувати" : "+\(score.added) хв", value: $score.added, in: 0...15)
                 }
                 Section { Button(score.pausedAt != nil ? "Продовжити годинник" : "Пауза (перерва)") { score.togglePause() } }
             }

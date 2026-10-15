@@ -25,9 +25,11 @@ Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSc
 
 In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position check inside the setup screen), 6, 7, 7b, 7c (viewer view), 8, 9 (play and share per clip; no "not a goal" button yet). Missing: 10 settings.
 
-## Scoreboard (2026-10-15)
+## Scoreboard (2026-10-15, design chosen 2026-10-16)
 
-The stream shows a TV-style score bug in the top left corner of the 1080p picture: colour stripe of each team, short name (12 characters), score, match clock. Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has a score bar with big − and + per team (a wrong tap is undone with −), and the "Час і тайм" button opens a sheet to pick the half (1st/2nd), the half length (10–45 min) and any clock time (late arrival), with pause/continue for half-time; switching to the 2nd half sets the clock to the half length (45:00). The bug shows "1Т 23:15". A new Go live starts at 0:0; resuming after a crash keeps the score.
+The stream shows a TV-style score bug in the top left corner of the 1080p picture. Owner's choice among three proposals (`follosim scoreboards DIR` renders them all): a red clock block on the left with the half ("2Т 67:42"), then the full club names with a colour stripe each and the score in a white box. Added time appears as a white "+3" tab under the clock; while the clock is paused the block says "ПЕРЕРВА"; after a "+" a banner "ГОЛ! <club>" in the team colour shows for 6 s under the bug. Code: `FolloCore/ScoreboardStyles.swift` (`ScoreStyle.classic`, `fullNames`), app `ScoreViews.swift`.
+
+Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has big − and + per team, a pause button and "Час і тайм": half (1st/2nd), half length (10–45 min), any clock time (late arrival), added time (0 = hidden), pause for half-time; switching to the 2nd half sets the clock to the half length and clears added time. A new Go live starts at 0:0, 1st half; resuming after a crash keeps everything.
 
 ## Name
 

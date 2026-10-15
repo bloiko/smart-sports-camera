@@ -15,7 +15,7 @@ final class LiveCameraRunner {
     private var frame = 0
     private var preroll: [(Double, Image8)] = []
     private(set) var prerollCount = 0, building = false
-    private let envQueue = DispatchQueue(label: "follo.env", qos: .userInitiated)
+    private let envQueue = DispatchQueue(label: "follo.env", qos: .utility)   // низький пріоритет: build 10 с на userInitiated душив потік камери
     var fps = 30.0
     /// Output crop (1920×1080) with the capture time of its source frame.
     var onOutput: ((CVPixelBuffer, CMTime) -> Void)?
@@ -31,16 +31,34 @@ final class LiveCameraRunner {
 
     /// Position check: call with a frame every ~1.5 s while the setup screen is open (7 frames over 10 s).
     /// Half-resolution median of the last 7 frames → field mask, image bounds, halfway line.
+    func resetPosition() { preroll.removeAll(); prerollCount = 0; env = nil; building = false }
+
     func addPrerollFrame(_ pb: CVPixelBuffer, time: Double) {
-        guard preroll.last.map({ time - $0.0 >= 1.4 }) ?? true else { return }
-        let w = CVPixelBufferGetWidth(pb) / 2, h = CVPixelBufferGetHeight(pb) / 2
-        guard let small = render(CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5)), w: w, h: h, pool: nil) else { return }
-        preroll.append((time, Image8(bgra: small))); if preroll.count > 7 { preroll.removeFirst() }
+        guard env == nil, !building, !prerollBusy, preroll.last.map({ time - $0.0 >= 1.4 }) ?? true else { return }   // після 7 кадрів нічого не рендеримо
+        // важке (CI-рендер + копія) — поза чергою камери, інакше камера відстає і iOS глушить потік
+        prerollBusy = true
+        envQueue.async { [weak self] in
+            guard let self else { return }
+            // 1/4 роздільної здатності (960×540): перевірка позиції за ~3 с на телефоні замість ~45 с на 1/2
+            let w = CVPixelBufferGetWidth(pb) / 4, h = CVPixelBufferGetHeight(pb) / 4
+            if let small = self.render(CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.25, y: 0.25)), w: w, h: h, pool: nil) {
+                let img = Image8(bgra: small)
+                DispatchQueue.main.async { self.preroll.append((time, img)); if self.preroll.count > 7 { self.preroll.removeFirst() }; self.prerollBusy = false; self.afterPreroll() }
+            } else { DispatchQueue.main.async { self.prerollBusy = false } }
+        }
+    }
+
+    private var prerollBusy = false
+    private func afterPreroll() {
+        DebugLog.log("preroll frame \(preroll.count)")
         prerollCount = preroll.count
         if preroll.count == 7, !building, env == nil {      // маска поля і центральна лінія — не на черзі камери (секунди)
             building = true; let frames = preroll.map { $0.1 }; let f = fps
+            DebugLog.log("env build start, mem \(DebugLog.memMB()) MB")
             envQueue.async { [weak self] in
-                let e = LiveEnv.make(frames: frames, fps: f).scaled(2)
+                let t0 = Date()
+                let e = LiveEnv.make(frames: frames, fps: f).scaled(4)
+                DebugLog.log("env build done in \(Int(Date().timeIntervalSince(t0) * 1000)) ms mem \(DebugLog.memMB()): \(e.positionProblem ?? "ok")")
                 DispatchQueue.main.async { self?.env = e; self?.building = false }
             }
         }

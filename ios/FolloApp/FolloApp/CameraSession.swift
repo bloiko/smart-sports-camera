@@ -12,7 +12,63 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var chunkCount = 0
     @Published var frameHandler: ((CMSampleBuffer) -> Void)?
     @Published var previewImage: UIImage?
+    @Published var useWide = false        // 1× замість 0.5×: мало світла (автоматично) або стенд удома
+    @Published var lowLight: String?      // підказка на екрані, коли кадр недоекспонований
+
+    /// Фон: зупинити камеру, інакше вона лишається зайнятою і інші застосунки (та наступний запуск) бачать чорне.
+    func pause() { queue.async { if self.session.isRunning { self.session.stopRunning(); DebugLog.log("session paused") } } }
+    func resume() {
+        queue.async {
+            guard !self.session.isRunning else { return }
+            if !self.session.inputs.isEmpty { self.session.startRunning() }
+            if !self.session.isRunning {                       // після фону сесія інколи не піднімається: перезбираємо
+                self.session.beginConfiguration()
+                for i in self.session.inputs { self.session.removeInput(i) }
+                for o in self.session.outputs { self.session.removeOutput(o) }
+                self.session.commitConfiguration(); self.setup()
+            }
+            DebugLog.log("session resumed \(self.session.isRunning)")
+        }
+    }
+
+    /// Перемкнути ультраширокy ↔ широку камеру (перезбирає сесію).
+    func switchCamera(wide: Bool) {
+        useWide = wide
+        queue.async {
+            self.session.stopRunning(); self.session.beginConfiguration()
+            for i in self.session.inputs { self.session.removeInput(i) }
+            for o in self.session.outputs { self.session.removeOutput(o) }
+            self.session.commitConfiguration(); self.setup()
+        }
+    }
     private var previewCount = 0
+    private var darkCount = 0
+    private var lastAutoSwitch = Date.distantPast
+    private var device: AVCaptureDevice?
+    private var observers: [NSObjectProtocol] = []
+    private var pressureObs: NSKeyValueObservation?
+
+    /// Мало світла на ультраширокій 3 виміри поспіль (6 с) → автоматично 1× (світліший об'єктив). Назад не перемикаємо
+    /// автоматично (гістерезис): користувач бачить підказку і кнопку.
+    private func lowLightCheck(dark: Bool) {
+        darkCount = dark ? darkCount + 1 : 0
+        guard darkCount >= 3, !useWide, Date().timeIntervalSince(lastAutoSwitch) > 30 else { return }
+        darkCount = 0; lastAutoSwitch = Date()
+        DebugLog.log("low light on ultra-wide: switching to 1x")
+        DispatchQueue.main.async {
+            self.lowLight = "Мало світла: перемкнув на камеру 1× (у ній більше світла, але менше поля в кадрі)"
+            self.switchCamera(wide: true)
+        }
+    }
+
+    private func rebuild() {
+        queue.async {
+            self.session.stopRunning(); self.session.beginConfiguration()
+            for i in self.session.inputs { self.session.removeInput(i) }
+            for o in self.session.outputs { self.session.removeOutput(o) }
+            self.session.commitConfiguration(); self.setup()
+        }
+    }
     private let previewCtx = CIContext(options: [.cacheIntermediates: false])
     let chunkSeconds: Double = 180
 
@@ -20,6 +76,7 @@ final class CameraSession: NSObject, ObservableObject {
 
     func configure() {
         AVCaptureDevice.requestAccess(for: .video) { ok in
+            DebugLog.log("camera permission \(ok)")
             guard ok else { DispatchQueue.main.async { self.cameraError = "Немає дозволу на камеру: Параметри → Follo → Камера" }; return }
             self.queue.async { self.setup() }
         }
@@ -27,28 +84,14 @@ final class CameraSession: NSObject, ObservableObject {
 
     private func setup() {
         session.beginConfiguration()
-        session.sessionPreset = .inputPriority
-        let dev = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back)
+        let dev = (useWide ? nil : AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back))
             ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
         guard let dev, let input = try? AVCaptureDeviceInput(device: dev) else {
             session.commitConfiguration(); DispatchQueue.main.async { self.cameraError = "Камеру не знайдено" }; return
         }
         if session.canAddInput(input) { session.addInput(input) }
-        // найбільший формат до 3840 px шириною з 30 fps (4K на ультраширокій є не на всіх моделях)
-        let fmts = dev.formats.filter { f in
-            let d = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
-            return d.width <= 3840 && f.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 30 }
-                && CMFormatDescriptionGetMediaSubType(f.formatDescription) == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-        }
-        if let fmt = fmts.max(by: { CMVideoFormatDescriptionGetDimensions($0.formatDescription).width < CMVideoFormatDescriptionGetDimensions($1.formatDescription).width }) {
-            do {
-                try dev.lockForConfiguration()
-                dev.activeFormat = fmt
-                dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
-                dev.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 30)
-                dev.unlockForConfiguration()
-            } catch { DispatchQueue.main.async { self.cameraError = "Формат: \(error.localizedDescription)" } }
-        }
+        // лише пресет (без ручного activeFormat): пресет і activeFormat на iOS взаємовиключні
+        session.sessionPreset = session.canSetSessionPreset(.hd4K3840x2160) ? .hd4K3840x2160 : .hd1920x1080
         let out = AVCaptureVideoDataOutput()
         out.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
         out.alwaysDiscardsLateVideoFrames = true
@@ -56,10 +99,63 @@ final class CameraSession: NSObject, ObservableObject {
         if session.canAddOutput(out) { session.addOutput(out) }
         if let c = out.connection(with: .video), c.isVideoRotationAngleSupported(0) { c.videoRotationAngle = 0 }
         session.commitConfiguration()
+        // Запас експозиції в темряві: відео 30 fps обмежує затвор до 1/30 с, на ультраширокій f/2.4 вночі це чорний кадр.
+        // Дозволяємо камері сама знижувати частоту до 15 fps, коли бракує світла. Робимо ДО startRunning, в окремій
+        // конфігурації після того, як пресет обрав формат (пресет скидає тривалості кадру).
+        session.beginConfiguration()
+        do {
+            try dev.lockForConfiguration()
+            let ranges = dev.activeFormat.videoSupportedFrameRateRanges
+            let minFps = ranges.map(\.minFrameRate).min() ?? 30
+            let slow = CMTime(value: 1, timescale: CMTimeScale(max(15, Int(minFps.rounded(.up)))))
+            dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
+            dev.activeVideoMaxFrameDuration = slow
+            if dev.isExposureModeSupported(.continuousAutoExposure) { dev.exposureMode = .continuousAutoExposure }
+            dev.unlockForConfiguration()
+            DebugLog.log("exposure headroom: fps 30…\(slow.timescale), maxISO \(Int(dev.activeFormat.maxISO))")
+        } catch { DebugLog.log("exposure headroom failed: \(error)") }
+        session.commitConfiguration()
+        device = dev
+        observe(dev)
         session.startRunning()
         let d = CMVideoFormatDescriptionGetDimensions(dev.activeFormat.formatDescription)
+        DebugLog.log("session running \(session.isRunning) \(dev.localizedName) \(d.width)x\(d.height) inputs \(session.inputs.count) outputs \(session.outputs.count) cost \(String(format: "%.2f", session.hardwareCost))")
         DispatchQueue.main.async { self.cameraError = self.session.isRunning ? nil : "Камера не запустилась"; self.formatInfo = "\(dev.localizedName) \(d.width)×\(d.height)" }
     }
+
+    /// Справжні сигнали AVFoundation замість здогадок: перерви, помилки, тиск системи.
+    private func observe(_ dev: AVCaptureDevice) {
+        observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
+        let nc = NotificationCenter.default
+        observers.append(nc.addObserver(forName: AVCaptureSession.wasInterruptedNotification, object: session, queue: nil) { n in
+            let r = (n.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int).flatMap(AVCaptureSession.InterruptionReason.init(rawValue:))
+            DebugLog.log("INTERRUPTED reason \(r.map { "\($0.rawValue)" } ?? "?")")
+            DispatchQueue.main.async { self.cameraError = Self.text(for: r) }
+        })
+        observers.append(nc.addObserver(forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: nil) { _ in
+            DebugLog.log("interruption ended"); DispatchQueue.main.async { self.cameraError = nil }
+        })
+        observers.append(nc.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: nil) { n in
+            let e = n.userInfo?[AVCaptureSessionErrorKey] as? AVError
+            DebugLog.log("RUNTIME ERROR \(e?.code.rawValue ?? 0) \(e?.localizedDescription ?? "")")
+            if e?.code == .mediaServicesWereReset { self.rebuild() } else { self.queue.async { self.session.startRunning() } }
+        })
+        pressureObs = dev.observe(\.systemPressureState, options: [.new]) { d, _ in
+            let p = d.systemPressureState
+            DebugLog.log("system pressure \(p.level.rawValue) factors \(p.factors.rawValue)")
+        }
+    }
+
+    private static func text(for r: AVCaptureSession.InterruptionReason?) -> String {
+        switch r {
+        case .videoDeviceInUseByAnotherClient: return "Камеру зайняв інший застосунок"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: return "Камера недоступна в режимі кількох застосунків"
+        case .videoDeviceNotAvailableDueToSystemPressure: return "Телефон перегрівся: камеру вимкнено, дай охолонути"
+        case .videoDeviceNotAvailableInBackground: return "Застосунок у фоні"
+        default: return "Камеру перервано"
+        }
+    }
+
     @Published var formatInfo = ""
 
     func startRecording() {
@@ -82,9 +178,27 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
         writer?.append(sampleBuffer)
         frameHandler?(sampleBuffer)
         previewCount += 1
-        if previewCount % 6 == 0, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {   // прев'ю 5 fps, 960 px
+        if previewCount % 15 == 0, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {   // прев'ю 5 fps, 960 px
             let ci = CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.25, y: 0.25))
-            if let cg = previewCtx.createCGImage(ci, from: ci.extent) { let ui = UIImage(cgImage: cg); DispatchQueue.main.async { self.previewImage = ui } }
+            if let cg = previewCtx.createCGImage(ci, from: ci.extent) { let ui = UIImage(cgImage: cg); DebugLog.preview(ui); DispatchQueue.main.async { self.previewImage = ui } }
+            else { DebugLog.log("preview: createCGImage failed, extent \(ci.extent)") }
+            if previewCount % 60 == 0 {                            // яскравість кадру + стан експозиції, раз на 2 с
+                CVPixelBufferLockBaseAddress(pb, .readOnly); defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+                if let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
+                    let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb), bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+                    var sum = 0, sum2 = 0, n = 0, mx = 0; let p8 = base.assumingMemoryBound(to: UInt8.self)
+                    for y in stride(from: 0, to: h, by: 60) { for x in stride(from: 0, to: w, by: 60) { let v = Int(p8[y * bpr + x]); sum += v; sum2 += v * v; n += 1; mx = max(mx, v) } }
+                    let mean = Double(sum) / Double(n), sd = (Double(sum2) / Double(n) - mean * mean).squareRoot()
+                    var exp = ""
+                    if let d = device {
+                        let iso = d.iso, maxISO = d.activeFormat.maxISO, off = d.exposureTargetOffset
+                        exp = String(format: " iso %.0f/%.0f shutter 1/%.0f offset %+.1fEV", iso, maxISO, 1 / CMTimeGetSeconds(d.exposureDuration), off)
+                        lowLightCheck(dark: off < -2 && iso >= 0.9 * maxISO && mean < 30)
+                    }
+                    DebugLog.log(String(format: "luma mean %.1f sd %.1f max %d", mean, sd, mx) + exp + " mem \(DebugLog.memMB()) MB")
+                }
+            }
+            if previewCount == 6 { DebugLog.log("first frame \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) fmt \(CVPixelBufferGetPixelFormatType(pb))") }
         }
     }
 }

@@ -26,7 +26,9 @@ struct SetupView: View {
     @State var startedAt: Date?
     @State var thermal = ProcessInfo.processInfo.thermalState
     @State var lastTouch = Date()                                   // пункт 11
-    @State var viewer = false                                       // пункт 10
+    @State var viewer = false
+    @State var lastDbg = ""
+    @Environment(\.scenePhase) var scenePhase                                       // пункт 10
     @State var showAdvice = !UserDefaults.standard.bool(forKey: "advice.shown")   // пункти 9, 14
     @State var result: Bool = false                                 // екран результату після Стоп
     @State var clips: [HighlightsRunner.Clip] = []
@@ -59,6 +61,12 @@ struct SetupView: View {
             }
             Text(error ?? cam.cameraError ?? status).font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
             if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
+            if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
+            if !cam.isRecording, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
+                Button(cam.useWide ? "Назад до 0.5× (ультраширока)" : "Поле замале → спробувати камеру 1×") {
+                    cam.switchCamera(wide: !cam.useWide); ls.runner.resetPosition()
+                }.font(.footnote)
+            }
             Spacer()
             if let w = ls.warning { Text(w).font(.footnote).foregroundStyle(.yellow) }
             if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
@@ -79,7 +87,7 @@ struct SetupView: View {
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
         .onAppear {
-            cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
+            DebugLog.reset(); cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
             ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
             // до ефіру: кадри для перевірки позиції (маска поля); під час ефіру: віртуальна камера
             cam.frameHandler = { [ls] sb in
@@ -87,10 +95,16 @@ struct SetupView: View {
                 else if let pb = CMSampleBufferGetImageBuffer(sb) { ls.runner.addPrerollFrame(pb, time: CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))) }
             }
         }
+        .onChange(of: scenePhase) { _, ph in
+            // у фоні iOS і так зупиняє камеру; відпускаємо її явно, щоб вона не лишалась зайнятою
+            if ph == .background { cam.pause() } else if ph == .active { cam.resume() }
+        }
+        .onDisappear { cam.pause() }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
-            else if error == nil { status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
+            else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
+                status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
         }
     }
 

@@ -35,6 +35,7 @@ struct MyMatchesView: View {
             }
             .navigationTitle("Follo")
             .fullScreenCover(isPresented: $newMatch, onDismiss: { matches = MatchStore.load() }) { SetupView() }
+            .onAppear { if CommandLine.arguments.contains("--autostart") { newMatch = true } }   // тест з Mac: одразу екран камери
         }
     }
     func fmt(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }

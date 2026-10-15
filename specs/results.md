@@ -296,6 +296,8 @@ Core ML now behaves like Python; the 1:02.3 failure is gone (it was a resampling
 | 2 | full height → pitch band | 31.8 → 45.4 | 92.6% → 92.9% | 1.34% → 1.23% | 4/4 → 4/4 |
 | 3 | full height → pitch band | 22.1 → 39.0 | 72.2% → 78.5% | 2.93% → 1.94% | 2/2 → 2/2 |
 
+**On the phone** (iPhone 15, test video match 2, 0:40–2:47, real time 25 fps, memory ~600 MB, thermal ok): mean distance to the Mac Core ML path 39 px (before today 150–300 px); jumps 1.20% (before 2.4–5.4%); twitches 1.4 per minute (Mac Core ML before: 3.3); ball in crop 94.3%; scoreboard in the stream frame.
+
 **Twitches** (a pan > 8 px/frame reversed within 0.5 s): 1.5–3.3 per minute for Core ML, Python 1.0–2.5. Most happen in goal mode while no ball is accepted (match 3 at 2:20–2:23: three 200 px swings without a ball): the goal-mode target moves between goal and players. Next: hold the goal-mode target while the ball is lost.
 
 ## Goal checklist

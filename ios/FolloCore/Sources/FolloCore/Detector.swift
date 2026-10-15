@@ -9,6 +9,11 @@ public final class Detector {
     public let model: MLModel
     public let inW: Int, inH: Int
     let ctx = CIContext(options: [.cacheIntermediates: false])
+    /// Resample like Python: no colour management (pixel values, not linear light) and, when enlarging (the ball ROI 2×),
+    /// bicubic a = −0.75 as `cv2.resize(..., INTER_CUBIC)`. With aligned frames the ball model then finds 100% of
+    /// Python's balls ≥ 0.4 and 99% of its own are Python's (match 2, `follosim ballroi`); bilinear in linear light: 99% / 95%.
+    public var cvLike = true
+    let rawCtx = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
     var pool: CVPixelBufferPool?
     public var iou = 0.7
 
@@ -39,13 +44,17 @@ public final class Detector {
         // CoreImage: origin bottom-left. Crop, move to the origin, scale, pad.
         let ciRect = CGRect(x: rect.minX, y: H - rect.maxY, width: rect.width, height: rect.height)
         var img = frame.cropped(to: ciRect).transformed(by: CGAffineTransform(translationX: -ciRect.minX, y: -ciRect.minY))
-        img = img.transformed(by: CGAffineTransform(scaleX: scale * s, y: scale * s))
+        if cvLike, scale * s > 1, let f = CIFilter(name: "CIBicubicScaleTransform") {
+            f.setValue(img, forKey: kCIInputImageKey); f.setValue(scale * s, forKey: kCIInputScaleKey); f.setValue(1.0, forKey: kCIInputAspectRatioKey)
+            f.setValue(0.0, forKey: "inputB"); f.setValue(0.75, forKey: "inputC"); img = f.outputImage ?? img
+        } else { img = img.transformed(by: CGAffineTransform(scaleX: scale * s, y: scale * s)) }
         img = img.transformed(by: CGAffineTransform(translationX: dx, y: Double(inH) - nh - dy))
         let bg = CIImage(color: CIColor(red: 114 / 255, green: 114 / 255, blue: 114 / 255)).cropped(to: CGRect(x: 0, y: 0, width: inW, height: inH))
         img = img.composited(over: bg)
         var pb: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool!, &pb)
         guard let out = pb else { return [] }
-        ctx.render(img, to: out, bounds: CGRect(x: 0, y: 0, width: inW, height: inH), colorSpace: CGColorSpaceCreateDeviceRGB())
+        if cvLike { rawCtx.render(img, to: out, bounds: CGRect(x: 0, y: 0, width: inW, height: inH), colorSpace: nil) }
+        else { ctx.render(img, to: out, bounds: CGRect(x: 0, y: 0, width: inW, height: inH), colorSpace: CGColorSpaceCreateDeviceRGB()) }
         let input = try! MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: out), "iouThreshold": MLFeatureValue(double: iou), "confidenceThreshold": MLFeatureValue(double: conf)])
         guard let res = try? model.prediction(from: input), let confs = res.featureValue(for: "confidence")?.multiArrayValue, let coords = res.featureValue(for: "coordinates")?.multiArrayValue else { return [] }
         let n = confs.shape[0].intValue, nc = confs.shape[1].intValue; var dets: [Det] = []

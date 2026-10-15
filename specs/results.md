@@ -275,6 +275,29 @@ Found on the phone (test-video source, match 2): the Core ML models see real spa
 
 On the phone (match 2 from 0:14, 160 s): jumps 2.4–5.4% → 2.0%, crop width 1284 → 1062 px (Mac 1030–1044), memory ~590 MB, 25 fps in real time. Frames old vs new at 0:41–0:46 and 2:13–2:18: the old camera showed empty grass by the spare balls and the ball boy, the new one stays on the play.
 
+## Core ML aligned with Python; player tiles for the phone's 16:9 frame (2026-10-15)
+
+**Frame alignment.** Matches 2 and 3 start with an empty edit (video after audio: 1.68 s, 0.98 s). AVAssetReader then decodes the first picture once more at time 0, cv2 does not: Swift frame f was Python frame f − 1. Every earlier Core ML vs Python comparison (players matched, "Core ML finds the ball 3× more often in match 3", the static look-alike at 1:02.3) was made one frame apart, and the tracker amplified it. `VideoReader` now skips that picture (also the test-video source on the phone).
+
+**Resampling.** `follosim ballroi VIDEO DIR` runs the Core ML ball model on Python's own ROIs (match 2, aligned): bilinear in linear light finds 99% of Python's balls ≥ 0.4 and 95% of its own are Python's; bicubic a = −0.75 without colour management (as `cv2.resize(..., INTER_CUBIC)`) gives 100% / 99%. Now the default (`Detector.cvLike`).
+
+| Match | Core ML before → after: ball in crop | Checklist | Jumps | Python (same tracker) |
+| --- | --- | --- | --- | --- |
+| 1 | 91.3% → 97.8% | 1/1 → 1/1 | 1.62% → 2.00% | 96.6%, 1/1, 1.37% |
+| 2 | 92.9% → 93.8% | 3/4 → **4/4** | 1.59% → 1.46% | 96.6%, 4/4, 1.39% |
+| 3 | 90.3% → 78.5% | 2/2 → 2/2 | 1.54% → 3.21% | 79.9%, 2/2, 3.25% |
+
+Core ML now behaves like Python; the 1:02.3 failure is gone (it was a resampling artefact, not a static object). Match 3 (evening) is weak for both; its earlier 90% was an accident of the shifted frames.
+
+**Player tiles on a 16:9 frame.** Core ML has a fixed 1280×672 input; two full-height tiles of a 3840×2160 frame are shrunk to 0.31 (panoramas: 0.62). New: on frames with W/H < 2.2 the tiles cover only the pitch band (field-mask rows + 120 px above) at the model's aspect ratio, at most 3 tiles (panoramas unchanged, detections identical). Test: matches 2 and 3 padded to 16:9 (4096×2304, 3840×2160), whole matches, same detection time:
+
+| Match | Tiles | Players per frame | Ball in crop | Jumps | Checklist |
+| --- | --- | --- | --- | --- | --- |
+| 2 | full height → pitch band | 31.8 → 45.4 | 92.6% → 92.9% | 1.34% → 1.23% | 4/4 → 4/4 |
+| 3 | full height → pitch band | 22.1 → 39.0 | 72.2% → 78.5% | 2.93% → 1.94% | 2/2 → 2/2 |
+
+**Twitches** (a pan > 8 px/frame reversed within 0.5 s): 1.5–3.3 per minute for Core ML, Python 1.0–2.5. Most happen in goal mode while no ball is accepted (match 3 at 2:20–2:23: three 200 px swings without a ball): the goal-mode target moves between goal and players. Next: hold the goal-mode target while the ball is lost.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

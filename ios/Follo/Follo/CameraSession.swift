@@ -2,6 +2,7 @@ import AVFoundation
 import UIKit
 import CoreImage
 import Combine
+import FolloCore
 
 /// 4K 30 fps з ультраширокої камери, запис файлами по chunkSeconds, кадри для нейромережі через delegate.
 final class CameraSession: NSObject, ObservableObject {
@@ -296,6 +297,7 @@ extension CameraSession {
         guard let track = asset.tracks(withMediaType: .video).first else { cameraError = "Не можу прочитати \(url.lastPathComponent)"; return }
         let fps = Double(track.nominalFrameRate) > 0 ? Double(track.nominalFrameRate) : 30
         let size = track.naturalSize
+        let start = VideoReader.videoStart(of: track)
         sourceFps = fps
         formatInfo = "Тестове відео \(url.lastPathComponent) \(Int(size.width))×\(Int(size.height)) \(Int(fps)) fps"
         DebugLog.log("test video \(url.lastPathComponent) \(Int(size.width))x\(Int(size.height)) \(fps) fps")
@@ -311,6 +313,7 @@ extension CameraSession {
                 var last = offset
                 while self.fileGen == gen { let more: Bool = autoreleasepool {   // потік без run loop: без пулу кадри не звільняються
                     guard let sb = out.copyNextSampleBuffer() else { return false }
+                    if CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)) < start - 0.001 { return true }   // extra picture of an empty edit (VideoReader.next)
                     while self.filePaused && self.fileGen == gen { Thread.sleep(forTimeInterval: 0.1); t0 += 0.1 }
                     let pts = CMTimeAdd(CMSampleBufferGetPresentationTimeStamp(sb), offset); last = pts
                     let wait = t0 + CMTimeGetSeconds(pts) - CACurrentMediaTime()

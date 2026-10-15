@@ -20,13 +20,24 @@ public final class VideoReader {
         let r = try AVAssetReader(asset: asset)
         let o = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         o.alwaysCopiesSampleData = false; r.add(o)
-        if frame > 0 { r.timeRange = CMTimeRange(start: CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(fps.rounded())), duration: .positiveInfinity) }
+        if frame > 0 { r.timeRange = CMTimeRange(start: CMTimeAdd(CMTime(seconds: videoStart, preferredTimescale: 600), CMTime(value: CMTimeValue(frame), timescale: CMTimeScale(fps.rounded()))), duration: .positiveInfinity) }
         r.startReading(); reader = r; output = o
     }
 
     public func next() -> CVPixelBuffer? {
-        guard let o = output, let sb = o.copyNextSampleBuffer() else { return nil }
-        return CMSampleBufferGetImageBuffer(sb)
+        guard let o = output else { return nil }
+        while let sb = o.copyNextSampleBuffer() {
+            // An empty edit at the start (video starting after the audio: m2 1.68 s, m3 0.98 s) makes the decoder emit
+            // the first picture once more at time 0; cv2/ffmpeg do not. Skipping it keeps frame f = Python's frame f.
+            if CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)) < videoStart - 0.001 { continue }
+            return CMSampleBufferGetImageBuffer(sb)
+        }
+        return nil
+    }
+    /// Track time of the first real picture (after an empty edit), see next().
+    public var videoStart: Double { Self.videoStart(of: track) }
+    public static func videoStart(of t: AVAssetTrack) -> Double {
+        t.segments.first(where: { !$0.isEmpty }).map { CMTimeGetSeconds($0.timeMapping.target.start) } ?? 0
     }
 }
 

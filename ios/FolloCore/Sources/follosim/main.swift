@@ -1,3 +1,4 @@
+import AVFoundation
 import ImageIO
 import Foundation
 import CoreImage
@@ -15,6 +16,34 @@ func die(_ s: String) -> Never { FileHandle.standardError.write((s + "\n").data(
 guard args.count >= 2 else { die("usage: follosim camera DIR B") }
 
 switch args[1] {
+case "ballroi":   // follosim ballroi VIDEO DIR [--cvlike] — the Core ML ball model on Python's own ROIs: agreement with Python's candidates
+    let reader = try! VideoReader(path: args[2]); let dir = args[3]
+    let bd = try! Detector(url: URL(fileURLWithPath: "models/coreml/ball.mlpackage")); bd.cvLike = args.contains("--cvlike")
+    var recs: [Int: FrameRecord] = [:]
+    for line in try! String(contentsOfFile: dir + "/live_det.jsonl").split(separator: "\n") { if let r = FrameRecord(jsonLine: String(line)), r.rois != nil { recs[r.frame] = r } }
+    try! reader.start(); var f = 0; var py = 0, pyHit = 0, ml = 0, mlHit = 0, confD: [Double] = []
+    while let pb = reader.next() {
+        autoreleasepool {
+            if let r = recs[f + (args.firstIndex(of: "--shift").map { Int(args[$0 + 1])! } ?? 0)], let rois = r.rois {
+                let img = CIImage(cvPixelBuffer: pb); var c: [Box] = []
+                for (x0, y0) in rois { c += bd.run(img, rect: CGRect(x: x0, y: y0, width: 320, height: 320), scale: 2, conf: 0.1).map { $0.box } }
+                let p = (r.balls ?? []).map { $0.box }
+                for b in p where b.conf >= 0.4 { py += 1; if let m = c.first(where: { abs($0.cx - b.cx) < 4 && abs($0.cy - b.cy) < 4 }) { pyHit += 1; confD.append(m.conf - b.conf) }
+                    else if args.contains("--show"), py % 50 == 0 { print("miss f\(f) py (\(Int(b.cx)),\(Int(b.cy))) \(b.conf) | coreml " + c.map { "(\(Int($0.cx)),\(Int($0.cy))) \(String(format: "%.2f", $0.conf))" }.joined(separator: " ")) } }
+                for b in c where b.conf >= 0.4 { ml += 1; if p.contains(where: { abs($0.cx - b.cx) < 4 && abs($0.cy - b.cy) < 4 }) { mlHit += 1 } }
+            }
+        }
+        f += 1
+    }
+    print("python balls ≥0.4: \(py), found by Core ML \(pyHit) (\(pyHit * 100 / max(py, 1))%); Core ML balls ≥0.4: \(ml), also in Python \(mlHit) (\(mlHit * 100 / max(ml, 1))%); conf diff median \(Stats.percentile(confD, 50))")
+case "frames":   // follosim frames VIDEO — sample timestamps as AVAssetReader gives them (frame alignment with cv2)
+    let a = AVURLAsset(url: URL(fileURLWithPath: args[2])); let t = a.tracks(withMediaType: .video)[0]
+    let r = try! AVAssetReader(asset: a); let o = AVAssetReaderTrackOutput(track: t, outputSettings: args.contains("--decoded") ? [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA] : nil); r.add(o); r.startReading()
+    var n = 0; var first: [String] = []
+    while let sb = o.copyNextSampleBuffer() {
+        if CMSampleBufferGetNumSamples(sb) > 0 { if n < 4 { first.append(String(format: "%.3f", CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))) }; n += 1 }
+    }
+    print("samples \(n), first PTS \(first), track timeRange start \(CMTimeGetSeconds(t.timeRange.start)) segments \(t.segments.prefix(3).map { "\(CMTimeGetSeconds($0.timeMapping.source.start))→\(CMTimeGetSeconds($0.timeMapping.target.start)) empty \($0.isEmpty)" })")
 case "scoreboard":   // follosim scoreboard OUT.png — the score bug as the stream shows it (for a look on the Mac)
     var st = ScoreState(home: ScoreTeam(name: "Tsukuba", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "Kyiv United FC", r: 0.1, g: 0.35, b: 0.9))
     st.homeGoals = 2; st.awayGoals = 1
@@ -88,6 +117,10 @@ case "env", "detect":
     let pl = try! Detector(url: models.appendingPathComponent("players.mlpackage")), bd = try! Detector(url: models.appendingPathComponent("ball.mlpackage"))
     let pipe = LivePipeline(W: reader.W, H: reader.H, fps: reader.fps, fm: env.fm!, fmd: env.fmd, players: pl, ball: bd)
     let limit = args.firstIndex(of: "--frames").map { Int(args[$0 + 1])! } ?? Int.max      // --frames N: stop early (tests)
+    if args.contains("--full-tiles") {          // the old full-height tiles on any frame (to compare on 16:9)
+        let tw = (reader.W + 100) / 2; pipe.playerRects = (0..<2).map { k in CGRect(x: max(0, min(k * (tw - 50), reader.W - tw)), y: 0, width: tw, height: reader.H) }
+    }
+    print("player tiles: " + pipe.playerRects.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))×\(Int($0.height))" }.joined(separator: " | "))
     try! reader.start(); var f = 0; let t1 = Date(); var lines: [String] = []; var found = 0, passes = 0
     while f < limit {
         // autoreleasepool: without it the ObjC objects of every frame (sample buffers, CIImages, model outputs) pile up

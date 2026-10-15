@@ -35,9 +35,9 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
 - **Done when:** every listed goal and shot passes, and the owner watches the goal moments without irritation.
 
 ### 3d. Camera quality on the phone (owner, 2026-10-15)
-1. **Static ball look-alike next to players** (match 2, Core ML, (2974, 201)): goal mode at 1:02.3 starts 1.2 s late; the last Core ML checklist failure (6/7). The 3 s static rule needs no player near; this one has players near. Idea: count repeated detections at the same spot over the whole match, not only consecutive ones.
-2. **Smoothness:** ~1.6% of frames still move > 20 px. Damp quick turns while the ball is lost for under a second (hold, then ease), check that shots still stay in frame (checklist).
-3. **Player-model input for the phone's 16:9 4K frame:** the export is 1280×672 for the 4096×1084 panoramas; a 3840×2160 frame needs its own tile size (letterboxing loses players, 76.5% matched on 3840×1504). Do before the first real match.
+1. ~~Static ball look-alike next to players (match 2, 1:02.3)~~ Done 2026-10-15: it was a Core ML artefact of frames shifted by one (empty edit) and bilinear resampling; aligned frames + cv2-like bicubic make Core ML = Python, checklist 7/7 (`results.md`).
+2. **Smoothness:** twitches 1.5–3.3 per minute, mostly in goal mode while no ball is accepted (goal-mode target swings between goal and players). Next: hold the goal-mode target while the ball is lost; judge on rendered video with the owner; checklist must stay 7/7.
+3. ~~Player-model input for the phone's 16:9 4K frame~~ Done 2026-10-15: tiles over the pitch band only (W/H < 2.2), +40–75% players, ball in crop equal or better on 16:9-padded matches 2 and 3. Still to check on real phone footage.
 
 ### 3e. Scoreboard on the stream (owner, 2026-10-15)
 - **Done 2026-10-15:** score bug burned into the 1080p stream, top left (team colour, name, score, match clock); "Команди" before the game (name, jersey colour from 10 swatches, show/hide); during the game big +/− for each team, hold the clock to restart it at kick-off; state survives a crash. Code: `FolloCore/Scoreboard.swift`, app `ScoreViews.swift`; look on the Mac: `follosim scoreboard OUT.png`. Checked on the phone with the test video.

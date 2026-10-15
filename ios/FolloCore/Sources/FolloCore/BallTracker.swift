@@ -7,6 +7,11 @@ public final class BallTracker {
     public struct Params {
         public var playerEvery = 4, ballEvery = 2, roi = 320, lostRois = 2
         public var conf = 0.4, confNear = 0.25, bgMin = 15.0
+        /// Re-acquiring a lost ball: a candidate far from players (isoNear heights) or from the play centre (isoFar px)
+        /// counts only when it flies (moveMin…moveMax px per frame since the first look); stillN looks within stillPx over
+        /// ≥ stillS → black list; slow (held, barely rolling) is neither taken nor black-listed
+        /// (spare balls beyond the line, a ball boy). Found on the phone: Core ML sees them and the camera drove there.
+        public var isoNear = 3.0, isoFar = 800.0, pendS = 2.0, stillS = 0.5, stillPx = 15.0, stillN = 3, moveMin = 4.0, moveMax = 60.0, pendMax = 8
         public init() {}
     }
     public let P: Params
@@ -18,6 +23,14 @@ public final class BallTracker {
     var hist: [(f: Int, p: Pt)] = []            // last 200 accepted balls
     var hints: [(x: Double, y: Double, f: Int)] = []   // last 20 ball hints from the player pass
     public var blacklist: [Pt] { black }
+    var pends: [(f: Int, p: Pt, n: Int, last: Int)] = []   // isolated candidates waiting: first frame, point, looks in place, last look
+
+    func suspect(_ p: Pt) -> Bool {
+        let near = lastPs.map { Stats.hypot(p.x - $0.cx, p.y - $0.y1) / max($0.h, 1) }.min() ?? 99
+        return near > P.isoNear || Stats.hypot(p.x - centre.x, p.y - centre.y) > P.isoFar
+    }
+    /// Hints at a black-listed spot are ignored.
+    public func notBlack(_ x: Double, _ y: Double) -> Bool { black.allSatisfy { Stats.hypot(x - $0.x, y - $0.y) > 30 } }
 
     public init(W: Int, H: Int, fps: Double, fm: Mask, fmd: Mask, params: Params = Params()) {
         self.W = Double(W); self.H = Double(H); self.fps = fps; self.fm = fm; self.fmd = fmd; P = params
@@ -56,7 +69,9 @@ public final class BallTracker {
         if !lost, let b = ball { cs = [Pt(b.x + ballV.x * Double(f - ballF), b.y + ballV.y * Double(f - ballF))] }
         else {
             let cands = hints.filter { f - $0.f <= P.playerEvery * 2 }.map { Pt($0.x, $0.y) } + feet + hot + [centre]
-            for _ in 0..<P.lostRois { cs.append(cands[scan % cands.count]); scan += 1 }
+            pends = pends.filter { Double(f - $0.f) <= P.pendS * fps }
+            if let q = pends.max(by: { $0.last < $1.last }) { cs.append(q.p) }      // look again: flying or still?
+            for _ in 0..<(P.lostRois - cs.count) { cs.append(cands[scan % cands.count]); scan += 1 }
         }
         roiCentres = cs
         return cs.map { (Int(Stats.clip($0.x - Double(P.roi) / 2, 0, W - Double(P.roi))), Int(Stats.clip($0.y - Double(P.roi) / 2, 0, H - Double(P.roi)))) }
@@ -70,16 +85,36 @@ public final class BallTracker {
     /// Candidates of all ROIs of frame f → accepted ball (and a blacklisted static look-alike, if any).
     public func accept(frame f: Int, _ cands: [BallCand]) -> (ball: Pt?, black: Pt?) {
         let lost = Double(f - ballF) / fps > 0.5; let c = roiCentres[0]
-        let good = cands.filter { bb in
+        var good = cands.filter { bb in
             let p = Pt(bb.box.cx, bb.box.cy)
             let thr = (!lost && Stats.hypot(p.x - c.x, p.y - c.y) < 60) ? P.confNear : P.conf
             return bb.box.conf >= thr && bb.bg >= P.bgMin && fm.at(p.x, p.y) && black.allSatisfy { Stats.hypot(p.x - $0.x, p.y - $0.y) > 30 }
+        }
+        if !good.isEmpty && lost {                                  // near the play wins over isolated candidates
+            let iso = good.map { suspect(Pt($0.box.cx, $0.box.cy)) }
+            if !iso.allSatisfy({ $0 }) { good = zip(good, iso).filter { !$0.1 }.map { $0.0 } }
         }
         guard !good.isEmpty else { return (nil, nil) }
         let pts = good.map { Pt($0.box.cx, $0.box.cy) }
         let ref = lost ? pts[(0..<good.count).max(by: { good[$0].box.conf < good[$1].box.conf })!] : c
         let k = (0..<pts.count).min(by: { Stats.hypot(pts[$0].x - ref.x, pts[$0].y - ref.y) < Stats.hypot(pts[$1].x - ref.x, pts[$1].y - ref.y) })!
         guard lost || Stats.hypot(pts[k].x - c.x, pts[k].y - c.y) < 350 * Double(f - ballF) / Double(P.ballEvery) else { return (nil, nil) }
+        if lost && suspect(pts[k]) {
+            pends = pends.filter { Double(f - $0.f) <= P.pendS * fps }
+            let p = pts[k]; let dist = { (q: (f: Int, p: Pt, n: Int, last: Int)) in Stats.hypot(p.x - q.p.x, p.y - q.p.y) }
+            let i = pends.indices.min(by: { dist(pends[$0]) < dist(pends[$1]) })
+            let d = i.map { dist(pends[$0]) } ?? 1e9
+            if let i, d < P.stillPx {                               // same spot
+                pends[i].n += 1; pends[i].last = f
+                if pends[i].n >= P.stillN && Double(f - pends[i].f) >= P.stillS * fps { black.append(p); pends.remove(at: i); return (nil, p) }
+                return (nil, nil)
+            } else if let i, f > pends[i].f, (P.moveMin...P.moveMax).contains(d / Double(f - pends[i].f)) {
+                pends.remove(at: i)                                 // flying: the ball
+            } else {
+                pends.append((f, p, 1, f)); if pends.count > P.pendMax { pends.removeFirst(pends.count - P.pendMax) }
+                return (nil, nil)
+            }
+        }
         if !lost, let b = ball { let d = Double(max(1, f - ballF)); ballV = Pt(0.5 * ballV.x + 0.5 * (pts[k].x - b.x) / d, 0.5 * ballV.y + 0.5 * (pts[k].y - b.y) / d) }
         else { ballV = Pt(0, 0) }
         ball = pts[k]; ballF = f

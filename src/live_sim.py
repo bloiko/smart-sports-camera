@@ -34,6 +34,11 @@ BALL_EVERY, ROI, ROI_UP, BALL_CONF, BALL_CONF_NEAR, LOST_ROIS = 2, 320, 2, 0.4, 
 LOST_ROIS, BALL_CONF = int(os.environ.get('LIVE_LOST_ROIS', LOST_ROIS)), float(os.environ.get('LIVE_BALL_CONF', BALL_CONF))
 BALL_MODEL = os.path.join(ROOT, 'models', 'ball_v02.pt')
 BG_EVERY_S, BG_N, BG_MIN = 3.0, 9, 15
+# Повернення до загубленого м'яча: кандидат далеко від гравців (ISO_NEAR зростів) або від центру гри (ISO_FAR px)
+# приймається, лише якщо летить (MOVE_MIN…MOVE_MAX px за кадр від першого погляду); STILL_N поглядів у межах STILL_PX
+# за ≥ STILL_S → чорний список; повільний (тримають, ледь котиться) — не приймається і не блокується
+# (запасні м'ячі за лінією, хлопчик з м'ячем). Знайдено на телефоні: Core ML бачить їх, і камера їхала туди.
+ISO_NEAR, ISO_FAR, PEND_S, STILL_S, STILL_PX, STILL_N, MOVE_MIN, MOVE_MAX, PEND_MAX = 3.0, 800, 2.0, 0.5, 15, 3, 4, 60, 8
 CAM = dict(out_w=1920, out_h=1080, spread_k=1.4, focus_px=300, min_crop_w=[800, 1700], max_crop_w=[1600, 2800],
            ball_weight=0.7, ball_hold_s=0.6, smooth_s=0.8, max_speed=900, catch_k=2.5, margin=0.08,
            goal_zone=[0.08, 0.16], goal_attack_n=5, goal_box_k=0.1, goal_unc=80, goal_min_data_s=30, goal_every_s=10,
@@ -63,6 +68,11 @@ def detect(video, out_path):
     bg_frames = collections.deque(maxlen=BG_N); last_bg = -1e9
     ball, ball_v, ball_f = None, np.zeros(2), -10 ** 9; centre = np.array([W / 2, H / 2]); scan = 0; hot = []
     black, last_ps = [], []; hist = collections.deque(maxlen=200); feet = []; hints = collections.deque(maxlen=20)
+    pends = []                                                     # [перший кадр, точка, поглядів на місці, останній кадр] ізольованих кандидатів
+
+    def suspect(p):
+        near = min((np.hypot(p[0] - (bb[0] + bb[2]) / 2, p[1] - bb[3]) / max(bb[3] - bb[1], 1) for bb in last_ps), default=99)
+        return near > ISO_NEAR or np.hypot(p[0] - centre[0], p[1] - centre[1]) > ISO_FAR
 
     def bg_diff(img, cx, cy):
         """Різниця з фоном (медіана останніх кадрів, зменшених удвічі) у точці; 99, якщо фону ще немає."""
@@ -90,7 +100,7 @@ def detect(video, out_path):
                     if cl == 0: ps.append(box)
                     elif sc >= 0.2:                               # підказка, де м'яч (той самий прохід, безкоштовно)
                         hx, hy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
-                        if fm[min(int(hy), H - 1), min(int(hx), W - 1)] and bg_diff(img, hx, hy) >= BG_MIN: hints.append((round(hx, 1), round(hy, 1), f)); rec.setdefault('hints', []).append([round(hx, 1), round(hy, 1)])
+                        if fm[min(int(hy), H - 1), min(int(hx), W - 1)] and bg_diff(img, hx, hy) >= BG_MIN and all(np.hypot(hx - q[0], hy - q[1]) > 30 for q in black): hints.append((round(hx, 1), round(hy, 1), f)); rec.setdefault('hints', []).append([round(hx, 1), round(hy, 1)])
             rec['persons'] = ps; times['players'] += time.time() - t; last_ps = ps
             pl = np.array([((b[0] + b[2]) / 2, b[3]) for b in ps if b[4] >= 0.25 and fmd[min(int(b[3]), H - 1), min(int((b[0] + b[2]) / 2), W - 1)]])
             if len(pl):
@@ -110,8 +120,9 @@ def detect(video, out_path):
                 # пошук: підказка з проходу гравців (клас «м'яч») → ноги гравців біля центру гри → скупчення;
                 # 2 плитки за прохід, поки м'яч загублено
                 cands = [np.array(h[:2]) for h in hints if f - h[2] <= PLAYER_EVERY * 2] + feet + hot + [centre]
-                rois = []
-                for _ in range(LOST_ROIS):
+                pends = [q for q in pends if f - q[0] <= PEND_S * fps]
+                rois = [max(pends, key=lambda q: q[3])[1].copy()] if pends else []   # ще раз глянути: летить чи стоїть
+                for _ in range(LOST_ROIS - len(rois)):
                     rois.append(np.array(cands[scan % len(cands)], float)); scan += 1
             bs = []; rec['roi'] = []
             for c in rois:
@@ -127,11 +138,26 @@ def detect(video, out_path):
             good = [bb for bb in bs if bb[4] >= (BALL_CONF_NEAR if not lost and np.hypot((bb[0] + bb[2]) / 2 - c[0], (bb[1] + bb[3]) / 2 - c[1]) < 60 else BALL_CONF)
                     and bb[5] >= BG_MIN and fm[min(int((bb[1] + bb[3]) / 2), H - 1), min(int((bb[0] + bb[2]) / 2), W - 1)]
                     and all(np.hypot((bb[0] + bb[2]) / 2 - q[0], (bb[1] + bb[3]) / 2 - q[1]) > 30 for q in black)]
+            if good and lost:                                     # біля гри — перевага над ізольованими
+                iso = [suspect(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)) for bb in good]
+                if not all(iso): good = [bb for bb, i in zip(good, iso) if not i]
             if good:
                 pts = np.array([((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2) for bb in good])
                 ref = c if not lost else pts[np.argmax([bb[4] for bb in good])]
                 k = int(np.argmin(np.linalg.norm(pts - ref, axis=1)))
-                if lost or np.linalg.norm(pts[k] - c) < 350 * (f - ball_f) / BALL_EVERY:
+                take = lost or np.linalg.norm(pts[k] - c) < 350 * (f - ball_f) / BALL_EVERY
+                if take and lost and suspect(pts[k]):
+                    take = False; pends = [q for q in pends if f - q[0] <= PEND_S * fps]
+                    q = min(pends, key=lambda q: np.linalg.norm(pts[k] - q[1]), default=None)
+                    d = np.linalg.norm(pts[k] - q[1]) if q is not None else 1e9
+                    if d < STILL_PX:                              # на тому самому місці
+                        q[2] += 1; q[3] = f
+                        if q[2] >= STILL_N and f - q[0] >= STILL_S * fps:
+                            black.append(pts[k].copy()); pends.remove(q); rec['black'] = [round(float(x), 1) for x in pts[k]]
+                    elif q is not None and f > q[0] and MOVE_MIN <= d / (f - q[0]) <= MOVE_MAX: pends.remove(q); take = True   # летить: м'яч
+                    else:
+                        pends.append([f, pts[k].copy(), 1, f]); pends = pends[-PEND_MAX:]; rec['pend'] = [round(float(x), 1) for x in pts[k]]
+                if take:
                     if not lost: ball_v = 0.5 * ball_v + 0.5 * (pts[k] - ball) / max(1, f - ball_f)
                     else: ball_v = np.zeros(2)
                     ball, ball_f = pts[k], f; rec['ball'] = [round(float(v), 1) for v in ball]

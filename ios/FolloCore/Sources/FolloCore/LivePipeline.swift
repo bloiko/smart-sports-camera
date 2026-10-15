@@ -35,7 +35,7 @@ public final class LivePipeline {
                     if d.cls == 0 { ps.append(d.box) }
                     else if d.cls == 32 && d.box.conf >= 0.2 {
                         let hx = d.box.cx, hy = d.box.cy
-                        if fm.at(hx, hy) && bg.diff(grey: greyImg(), hx, hy) >= bgMin { hints.append(Pt(hx, hy)) }
+                        if fm.at(hx, hy) && bg.diff(grey: greyImg(), hx, hy) >= bgMin && tracker.notBlack(hx, hy) { hints.append(Pt(hx, hy)) }
                     }
                 }
             }

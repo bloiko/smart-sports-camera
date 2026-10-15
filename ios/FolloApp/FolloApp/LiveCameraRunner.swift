@@ -39,9 +39,12 @@ final class LiveCameraRunner {
         prerollBusy = true
         envQueue.async { [weak self] in
             guard let self else { return }
-            // 1/4 роздільної здатності (960×540): перевірка позиції за ~3 с на телефоні замість ~45 с на 1/2
-            let w = CVPixelBufferGetWidth(pb) / 4, h = CVPixelBufferGetHeight(pb) / 4
-            if let small = self.render(CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.25, y: 0.25)), w: w, h: h, pool: nil) {
+            // Повна роздільність: ядра маски поля і центральної лінії задані в пікселях повного кадру (як у live_sim.py).
+            // На 1/4 вони ставали вчетверо більшими: маска 90% кадру замість 79%, кадр камери ширший на 20%.
+            // Збірка з -O: ~2–5 с і ~250–450 МБ один раз до гри.
+            let k = Self.envScale, w = CVPixelBufferGetWidth(pb) / k, h = CVPixelBufferGetHeight(pb) / k
+            let img = k == 1 ? CIImage(cvPixelBuffer: pb) : CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 1 / CGFloat(k), y: 1 / CGFloat(k)))
+            if let small = self.render(img, w: w, h: h, pool: nil) {
                 let img = Image8(bgra: small)
                 DispatchQueue.main.async { self.preroll.append((time, img)); if self.preroll.count > 7 { self.preroll.removeFirst() }; self.prerollBusy = false; self.afterPreroll() }
             } else { DispatchQueue.main.async { self.prerollBusy = false } }
@@ -49,6 +52,7 @@ final class LiveCameraRunner {
     }
 
     private var prerollBusy = false
+    static let envScale = 1
     private func afterPreroll() {
         DebugLog.log("preroll frame \(preroll.count)")
         prerollCount = preroll.count
@@ -57,7 +61,7 @@ final class LiveCameraRunner {
             DebugLog.log("env build start, mem \(DebugLog.memMB()) MB")
             envQueue.async { [weak self] in
                 let t0 = Date()
-                let e = LiveEnv.make(frames: frames, fps: f).scaled(4)
+                let e = Self.envScale == 1 ? LiveEnv.make(frames: frames, fps: f) : LiveEnv.make(frames: frames, fps: f).scaled(Self.envScale)
                 DebugLog.log("env build done in \(Int(Date().timeIntervalSince(t0) * 1000)) ms mem \(DebugLog.memMB()): \(e.positionProblem ?? "ok")")
                 DispatchQueue.main.async { self?.env = e; self?.building = false }
             }

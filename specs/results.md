@@ -258,6 +258,23 @@ Conclusion: team separation from live detections cannot label goals reliably; th
 
 Neither is switched on: the evening match needs a better ball detector (model v0.3 on the three matches, backlog P1), not a wider search.
 
+## Spare balls and the phone environment (2026-10-15, owner: "the camera jumps and shows someone else")
+
+Found on the phone (test-video source, match 2): the Core ML models see real spare balls lying beyond the touchline (match 2 at 0:42, a ball boy at 2:14–2:17) and the camera drove there; the phone also built the field mask on 1/4-resolution frames with full-resolution kernels (crop ~20% wider). Fixes: re-acquiring a lost ball, a candidate far from players (3 heights) or from the play centre (800 px) is taken only when it flies (4–60 px per frame since the first look); three looks within 15 px over ≥ 0.5 s put it on the black list; the phone environment is built at full resolution (3.2 s on the iPhone 15). Swift and Python: SAME TRACK and SAME PATH on all 3 matches.
+
+`python src/eval_live.py N PATHS…`, buffer 2 s. Jumps = frames whose crop centre moves > 20 px.
+
+| Match | Path | Jumps | Ball in crop | Checklist |
+| --- | --- | --- | --- | --- |
+| 1 | Python before → after | 2.87% → 1.37% | 95.0% → 96.6% | 1/1 → 1/1 |
+| 1 | Core ML before → after | 3.88% → 1.62% | 91.6% → 91.3% | 1/1 → 1/1 |
+| 2 | Python before → after | 1.18% → 1.39% | 92.3% → 96.6% | 4/4 → 4/4 |
+| 2 | Core ML before → after | 3.47% → 1.59% | 93.2% → 92.9% | 3/4 → 3/4 (1:02.3, known static look-alike at (2974, 201)) |
+| 3 | Python before → after | 3.13% → 3.25% | 75.7% → 79.9% | 2/2 → 2/2 |
+| 3 | Core ML before → after | 2.83% → 1.54% | 92.4% → 90.3% (3 track points) | 2/2 → 2/2 |
+
+On the phone (match 2 from 0:14, 160 s): jumps 2.4–5.4% → 2.0%, crop width 1284 → 1062 px (Mac 1030–1044), memory ~590 MB, 25 fps in real time. Frames old vs new at 0:41–0:46 and 2:13–2:18: the old camera showed empty grass by the spare balls and the ball boy, the new one stays on the play.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

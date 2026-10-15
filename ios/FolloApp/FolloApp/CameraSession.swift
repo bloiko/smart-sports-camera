@@ -244,6 +244,8 @@ final class ChunkWriter {
             AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: w, AVVideoHeightKey: h,
             AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitRate]])
         i.expectsMediaDataInRealTime = true
+        // fragments every 10 s: if the app is killed (battery, crash) the chunk still opens up to the last fragment
+        wr.movieFragmentInterval = CMTime(seconds: 10, preferredTimescale: 600)
         wr.add(i); wr.startWriting(); wr.startSession(atSourceTime: time)
         writer = wr; input = i; chunkStart = time
     }
@@ -261,7 +263,12 @@ final class ChunkWriter {
         guard let w = writer else { return }
         input?.markAsFinished()
         let n = index
-        w.finishWriting { self.onChunk(n) }
+        // AVAssetWriter must stay alive until finishWriting completes, otherwise the file is left without its index
+        // (moov) and does not open: the closure holds `w` (found 2026-10-16: a 360 MB chunk with no moov atom)
+        w.finishWriting { [w] in
+            DebugLog.log("chunk \(n) finished: status \(w.status.rawValue) \(w.error?.localizedDescription ?? "ok")")
+            self.onChunk(n)
+        }
         writer = nil; input = nil
     }
 }

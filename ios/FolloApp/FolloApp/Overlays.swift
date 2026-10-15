@@ -2,13 +2,13 @@ import SwiftUI
 import Combine
 import AVFoundation
 
-/// Пункт 11: екран темніє через 10 с без дотику; будь-який дотик повертає. Стрім і запис тривають.
+/// Пункт 11: екран темніє через 60 с без дотику; будь-який дотик повертає. Стрім і запис тривають.
 struct DimOverlay: View {
     @Binding var lastTouch: Date
     @State private var now = Date()
     @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     var body: some View {
-        let dim = now.timeIntervalSince(lastTouch) > 10
+        let dim = now.timeIntervalSince(lastTouch) > 60          // власник: 10 с — замало, хвилина
         Color.black.opacity(dim ? 0.97 : 0).ignoresSafeArea().allowsHitTesting(dim)
             .onTapGesture { lastTouch = Date() }
             .onReceive(ticker) { now = $0 }

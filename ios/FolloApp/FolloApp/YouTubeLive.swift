@@ -30,6 +30,19 @@ enum YouTubeLive {
                           streamKey: ing["streamName"] as! String, watchURL: "https://youtu.be/\(bid)")
     }
 
+    /// Debug: ключ трансляції з YouTube Studio (Documents/debug/youtube_key.txt, копіюється з Mac secrets/youtube_key.txt)
+    /// замість Google Sign-In + API. Приватність задається в Studio для стріму за замовчуванням.
+    static func debugStreamKey() -> String? {
+        #if DEBUG
+        let u = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("debug/youtube_key.txt")
+        let k = (try? String(contentsOf: u, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return k.isEmpty ? nil : k
+        #else
+        return nil
+        #endif
+    }
+    static let studioIngest = "rtmps://a.rtmps.youtube.com:443/live2"
+
     static func complete(token: String, broadcastId: String) async {
         _ = try? await post(token, "liveBroadcasts/transition?part=id&id=\(broadcastId)&broadcastStatus=complete", [:])
     }

@@ -119,7 +119,7 @@ struct SetupView: View {
             // debug: --golive натискає GO LIVE сам, щойно перевірка позиції пройшла (тест з Mac без дотику)
             if startedAt == nil, !cam.isRecording, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); go() }
             if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
-                DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) thermal \(thermalText) mem \(DebugLog.memMB()) MB")
+                DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB")
             }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
@@ -136,6 +136,10 @@ struct SetupView: View {
                 // TODO: токен з Google Sign-In; поки що — з Info.plist ключ YT_TOKEN для тесту
                 let token = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""
                 if !resume, !token.isEmpty { live = try await YouTubeLive.createBroadcast(token: token, title: "Follo \(Date().formatted(date: .abbreviated, time: .shortened))") }
+                else if !resume, token.isEmpty, let k = YouTubeLive.debugStreamKey() {      // debug: ключ з YouTube Studio
+                    live = LiveTarget(broadcastId: "", rtmpsURL: YouTubeLive.studioIngest, streamKey: k, watchURL: "https://studio.youtube.com")
+                    DebugLog.log("YouTube: Studio stream key")
+                }
                 else if live == nil { status = "Без YouTube: лише запис (додай Google Sign-In)" }
                 cam.startRecording(); startedAt = resume ? ls.saved?.startedAt ?? Date() : Date()
                 if let l = live {
@@ -166,7 +170,7 @@ struct SetupView: View {
                                            goals: out.filter { $0.kind == "goal" }.count, knownPitch: ls.runner.knownPitch))
             }
         }
-        if let l = target { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
+        if let l = target, !l.broadcastId.isEmpty { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
         status = "Записано \(cam.chunkCount) файлів у Documents/chunks"
     }
 

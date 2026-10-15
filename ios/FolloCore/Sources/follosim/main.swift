@@ -18,10 +18,28 @@ case "position":   // follosim position work/mN/live_pre — the Go live positio
     let e = try LiveEnv.load(dir: args[2])
     let fb = e.fm?.farBand
     print("far band \(fb.map { "\(Int($0.0))..\(Int($0.1)) of \(e.W)" } ?? "none"): \(e.positionProblem ?? "ok")")
+case "envq":       // follosim envq VIDEO DIR K — the environment as the phone builds it: 7 frames downscaled K× (box), then scaled(K)
+    let reader = try! VideoReader(path: args[2]); let k = Int(args[4])!
+    try! reader.start(); let n = min(reader.frames, Int(LiveEnv.prerollS * reader.fps))
+    let idx = (0..<7).map { Int(Double(n) * (Double($0) + 0.5) / 7) }
+    var frames: [Image8] = []; var f = 0
+    while f <= idx.last!, let pb = reader.next() {
+        if idx.contains(f) {
+            let im = Image8(bgra: pb); let w = im.w / k, h = im.h / k; var d = [UInt8](repeating: 0, count: w * h * 3)
+            for y in 0..<h { for x in 0..<w { for c in 0..<3 { var sum = 0
+                for yy in 0..<k { for xx in 0..<k { sum += Int(im.data[((y * k + yy) * im.w + x * k + xx) * 3 + c]) } }
+                d[(y * w + x) * 3 + c] = UInt8(sum / (k * k)) } } }
+            frames.append(Image8(w: w, h: h, ch: 3, data: d))
+        }
+        f += 1
+    }
+    let e = LiveEnv.make(frames: frames, fps: reader.fps).scaled(k)
+    try! e.save(dir: args[3], prefix: "q\(k)_"); print("saved q\(k)_env: fmd share \(e.fmd.share), position \(e.positionProblem ?? "ok")")
 case "camera":
     guard args.count >= 4, let B = Double(args[3]) else { die("usage: follosim camera DIR B") }
     let dir = args[2]; let swift = args.contains("--swift")      // --swift: Swift detections and environment instead of Python's
-    let env = try! LiveEnv.load(dir: dir, prefix: swift ? "swift_" : "")
+    let envPrefix = args.firstIndex(of: "--env").map { args[$0 + 1] } ?? (swift ? "swift_" : "")   // --env q4_: the phone's environment
+    let env = try! LiveEnv.load(dir: dir, prefix: envPrefix)
     var cfg = CameraConfig()
     if let i = args.firstIndex(of: "--prior") { let v = args[i + 1].split(separator: ",").map { Double($0)! }; cfg.goalsPrior = [Pt(v[0], v[1]), Pt(v[2], v[3])] }
     let cam = LiveCamera(W: env.W, H: env.H, fps: env.fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: B, config: cfg)
@@ -30,7 +48,7 @@ case "camera":
         if let r = FrameRecord(jsonLine: String(line)) { cam.push(r); n += 1 }
     }
     cam.finish()
-    let out = dir + (swift ? "/swiftdet_B\(B.formatted()).json" : "/swift_B\(B.formatted()).json")
+    let out = dir + (swift ? "/swiftdet_B\(B.formatted()).json" : "/swift_B\(B.formatted()).json").replacingOccurrences(of: "_B", with: args.contains("--env") ? "_\(envPrefix)B" : "_B")
     try! CameraPathJSON.write(cam, to: out)
     print("camera B=\(B)s: \(n) frames in \(Int(Date().timeIntervalSince(t0))) s; goals \(cam.goals.map { $0.map { "[\(Int($0.x.rounded())), \(Int($0.y.rounded()))]" } } ?? []) → \(out)")
 case "track":

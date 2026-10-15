@@ -50,6 +50,18 @@ xcrun devicectl device process launch --terminate-existing --device <UDID> com.b
 - `--golive` presses GO LIVE once the position check passes (no YouTube token in debug builds: recording and virtual camera only).
 - The log (`Documents/debug/log.txt`) prints every 10 s: frames in/out, ball share, goals known, thermal state, memory.
 
+## Private YouTube test without Google Cloud (debug builds only)
+
+1. YouTube Studio → Create → Go live → Stream. Set the visibility of the stream to **Private**. The first time, YouTube may take up to 24 h to enable live streaming on the channel.
+2. Copy the stream key into `secrets/youtube_key.txt` on the Mac (git-ignored; never paste it into chat or commits).
+3. Copy it to the phone:
+
+```bash
+xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer --domain-identifier com.bohdanloiko.follo --source secrets/youtube_key.txt --destination Documents/debug/youtube_key.txt
+```
+
+GO LIVE then streams to `rtmps://a.rtmps.youtube.com:443/live2` with that key; the log shows `stream live` every 10 s. Release builds ignore the file.
+
 ## Testing at home without a pitch
 
 `python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac, cropped to the pitch and stretched to fill the screen (`--keep` keeps the aspect ratio; the panorama is ~3.8:1, so unstretched it is a thin strip). Put the phone 25–35 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.

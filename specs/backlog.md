@@ -6,6 +6,12 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
 
 ## P0: now
 
+### 0. Camera on the phone jumps and follows the wrong thing (owner, 2026-10-15)
+- **Measured** on match 2 through the test-video source: the phone path is 150–300 px off the Mac path, with 2–5% frames jumping > 20 px (Mac with Python detections: 1.2%).
+- **Cause 1, detections:** the Core ML models find real spare balls lying beyond the touchline (match 2 at 42.5 s, 136 s, 137.4 s) and one point in the trees (44.9 s); Ultralytics on the Mac does not. The player model reports them as "sports ball" hints, the tracker accepts them (conf 0.6–0.8, background difference ≈ 30), and the camera drives to them. The same jumps appear on the Mac with Core ML (`follosim camera --swift`: 3.5% jumping frames), so it is not the phone.
+- **Cause 2, environment:** the phone builds the field mask on 1/4-resolution frames with kernels sized for full resolution (`dilated(41)` becomes 164 px), so the mask is 90% of the frame instead of 79% and the crop is ~20% wider. `follosim envq VIDEO DIR 4` reproduces it on the Mac.
+- **Proposed fix:** (a) a ball outside the playing area or far from every player, at a spot where it stays still, is not a ball (spare balls, ball boys); the tracker already has a black list for static spots; (b) scale the pixel kernels of the environment by the resolution factor. Check with `check_goals.py` on all checklists, Python and Swift in parity, then the phone path against `follosim`.
+
 ### 1. Goal checklist: keep growing it
 - **State:** 7 events (match 1: goal 2:54.8; match 2: chance 3:38 + 3 attacks found by Claude; match 3: chance 1:25, goal 2:04.7). v0.3 passes 7/7, v0.2 3/7.
 - **Limit:** Claude's scan covered only zoomed goal areas inside the highlight clips; at 5–8 px the ball is often not visible on those frames, so shots outside the clips (and in match 3, where nothing extra could be confirmed) may be missing.

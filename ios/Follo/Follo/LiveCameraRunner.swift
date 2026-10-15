@@ -77,11 +77,14 @@ final class LiveCameraRunner {
         cam = LiveCamera(W: env.W, H: env.H, fps: fps, fmd: env.fmd, top: env.top, bot: env.bot, centre: env.centre, bufferS: bufferS, config: cfg)
         cam?.onFrame = { [weak self] f, fr in self?.emit(f, fr) }
         frame = 0; ring = [:]; ballPasses = 0; ballFound = 0
+        // debug: шлях камери по кадрах у Documents/debug/path.csv — порівняння з live_sim.py на тому самому відео
+        let pu = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("debug/path.csv")
+        try? "f,t,x,y,cw,ch,gon,bx,by\n".write(to: pu, atomically: true, encoding: .utf8); pathLog = try? FileHandle(forWritingTo: pu); pathLog?.seekToEndOfFile()
     }
 
     /// Після Стоп: траєкторія і кольори форми для хайлайтів (HighlightsRunner), потім звільнити пам'ять.
     func stop() -> (cam: LiveCamera, jerseys: [JerseySample])? {
-        defer { pipe = nil; cam = nil; ring = [:] }
+        defer { pipe = nil; cam = nil; ring = [:]; try? pathLog?.close(); pathLog = nil }
         guard let cam = cam, let pipe = pipe else { return nil }
         cam.finish()
         if let g = cam.goals, let e = env { PitchMemory.remember(PitchMemory(env: e, goals: g), in: Self.pitchesURL) }   // запам'ятати поле
@@ -102,8 +105,11 @@ final class LiveCameraRunner {
         cam.push(rec)
     }
 
+    private var pathLog: FileHandle?
     private func emit(_ f: Int, _ fr: LiveCamera.Frame) {
         guard let (src, t) = ring.removeValue(forKey: f) else { return }
+        let b = fr.ball.map { String(format: "%.1f,%.1f", $0.x, $0.y) } ?? ","
+        pathLog?.write(String(format: "%d,%.3f,%.1f,%.1f,%.1f,%.1f,%d,", f, CMTimeGetSeconds(t), fr.x, fr.y, fr.cw, fr.ch, fr.gon ? 1 : 0).appending(b + "\n").data(using: .utf8)!)
         for k in ring.keys where k < f { ring[k] = nil }
         let H = Double(CVPixelBufferGetHeight(src))
         let rect = CGRect(x: fr.x - fr.cw / 2, y: H - (fr.y + fr.ch / 2), width: fr.cw, height: fr.ch)   // CoreImage: origin bottom-left

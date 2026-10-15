@@ -40,7 +40,7 @@ BG_EVERY_S, BG_N, BG_MIN = 3.0, 9, 15
 # (запасні м'ячі за лінією, хлопчик з м'ячем). Знайдено на телефоні: Core ML бачить їх, і камера їхала туди.
 ISO_NEAR, ISO_FAR, PEND_S, STILL_S, STILL_PX, STILL_N, MOVE_MIN, MOVE_MAX, PEND_MAX = 3.0, 800, 2.0, 0.5, 15, 3, 4, 60, 8
 CAM = dict(out_w=1920, out_h=1080, spread_k=1.4, focus_px=300, min_crop_w=[800, 1700], max_crop_w=[1600, 2800],
-           ball_weight=0.7, ball_hold_s=0.6, smooth_s=0.8, max_speed=900, catch_k=2.5, margin=0.08,
+           ball_weight=0.7, ball_hold_s=0.6, ball_fade_s=1.0, zn_avg_s=1.0, gi_keep=0.25, smooth_s=0.8, max_speed=900, catch_k=2.5, margin=0.08,
            goal_zone=[0.08, 0.16], goal_attack_n=5, goal_box_k=0.1, goal_unc=80, goal_min_data_s=30, goal_every_s=10,
            # режим воріт вмикається не раніше ніж за 2 с: з 5 с камера показувала порожні ворота, поки гра в центрі (матч 2, 0:58)
            anticipate_s=2.0,

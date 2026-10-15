@@ -300,6 +300,18 @@ Core ML now behaves like Python; the 1:02.3 failure is gone (it was a resampling
 
 **Twitches** (a pan > 8 px/frame reversed within 0.5 s): 1.5–3.3 per minute for Core ML, Python 1.0–2.5. Most happen in goal mode while no ball is accepted (match 3 at 2:20–2:23: three 200 px swings without a ball): the goal-mode target moves between goal and players. Next: hold the goal-mode target while the ball is lost.
 
+## Goal mode without swinging (2026-10-16, owner: "the camera swings between the goal and the players")
+
+Cause (camera internals, match 3 at 2:20–2:25): the goal weight follows the number of players in the goal zone, an integer that jumps 1–5 from frame to frame; each player moved the target ~225 px, and equal counts at both ends flipped the target to the other goal for a moment. Fixes in `live_cam.py` / `LiveCamera.swift` (Python = Swift, SAME PATH on 3 matches): the count is averaged over `zn_avg_s` = 1 s; the chosen goal is sticky (the other one only when its weight is higher by more than `gi_keep` = 0.25); the ball weight fades over `ball_fade_s` = 1 s after the 0.6 s hold instead of dropping to zero (alone it changed nothing measurable). All three set to 0 give the old path exactly.
+
+| Match | Twitches per minute, Python old → new | Core ML old → new | Jumps, Core ML | Ball in crop, Core ML | Checklist |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1.5 → 1.0 | 2.2 → 1.8 | 2.00% → 1.70% | 97.8% → 97.8% | 1/1 (goal mouth in frame 97% → 100% in Python) |
+| 2 | 1.0 → 1.0 | 1.5 → 1.5 | 1.46% → 1.36% | 93.8% → 93.8% | 4/4 |
+| 3 | 2.5 → 0.3 | 3.3 → 0.8 | 3.21% → 2.28% | 78.5% → 78.5% | 2/2 |
+
+Before/after videos (match 3 2:18–2:28, match 1 goal 2:50–2:58) rendered side by side: before, the camera drifts left at 2:21.8–2:23.4 and cuts the right goal during the attack; after, it holds the attack with the goal.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

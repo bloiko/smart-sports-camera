@@ -131,7 +131,11 @@ class LiveCamera:
     def target(self, g, h):
         C = self.C; pc, spread, zn, base, G = self.S[g]; lb = self.last_ball(g, h)
         ball_ok = lb is not None and (g - lb[0]) / self.fps <= C['ball_hold_s']
-        c = (C['ball_weight'] * lb[1][0] + (1 - C['ball_weight']) * pc[0], C['ball_weight'] * lb[1][1] + (1 - C['ball_weight']) * pc[1]) if ball_ok else pc
+        # після ball_hold_s вага м'яча згасає за ball_fade_s, а не стрибає до нуля: м'яч видно уривками, і ціль
+        # смикалась між м'ячем і центром гравців (у режимі воріт — розмах до 200 px, матч 3, 2:20)
+        fade = 1.0 if ball_ok else (max(0.0, 1 - ((g - lb[0]) / self.fps - C['ball_hold_s']) / C['ball_fade_s']) if lb is not None and C['ball_fade_s'] > 0 else 0.0)
+        bw = C['ball_weight'] * fade
+        c = (bw * lb[1][0] + (1 - bw) * pc[0], bw * lb[1][1] + (1 - bw) * pc[1]) if fade > 0 else pc
         lo = interp(c[1], self.depth, C['min_crop_w']); hi = interp(c[1], self.depth, C['max_crop_w'])
         cw = clip(spread * C['spread_k'], lo, hi)
         if not ball_ok:
@@ -139,13 +143,23 @@ class LiveCamera:
             cw = min(cw * (1 + (C['lost_zoom'] - 1) * min(1.0, (lost_s - C['ball_hold_s']) / 1.0)), hi * C['lost_zoom'])
         gw, gi = 0.0, -1
         if G is not None:
-            D = math.hypot(G[1][0] - G[0][0], G[1][1] - G[0][1]); focus = lb[1] if ball_ok else pc
+            D = math.hypot(G[1][0] - G[0][0], G[1][1] - G[0][1])
+            focus = (fade * lb[1][0] + (1 - fade) * pc[0], fade * lb[1][1] + (1 - fade) * pc[1]) if fade > 0 else pc
+            # гравців у зоні воріт — середнє за zn_avg_s: миттєве число скаче 1–5, і кожен «зайвий» гравець зсував ціль на ~225 px
+            zw = max(1, int(C['zn_avg_s'] * self.fps)); js = range(max(0, g - zw + 1), g + 1)
+            znm = [sum(self.S[j][2][k] for j in js) / len(js) for k in range(2)]
+            w = []
             for k in range(2):
                 d = math.hypot(focus[0] - G[k][0], focus[1] - G[k][1]) / D
                 wk = clip((C['goal_zone'][1] - d) / (C['goal_zone'][1] - C['goal_zone'][0]), 0, 1)
-                wa = clip((zn[k] - base[k] - 1) / (C['goal_attack_n'] - 1), 0, 1)
+                wa = clip((znm[k] - base[k] - 1) / (C['goal_attack_n'] - 1), 0, 1)
                 if ball_ok and d > C['goal_zone'][1]: wa *= 0.3
-                if max(wk, wa) > gw: gw, gi = max(wk, wa), k
+                w.append(max(wk, wa))
+            gi = 1 if w[1] > w[0] else (0 if w[0] > 0 else -1)
+            # ворота «липкі»: інші — лише якщо вага більша ніж на gi_keep (рівні числа гравців перекидали камеру на інші ворота)
+            prev = self.GI[-1] if self.GI else -1
+            if C['gi_keep'] > 0 and prev >= 0 and w[prev] > 0 and w[prev] >= (w[gi] if gi >= 0 else 0) - C['gi_keep']: gi = prev
+            gw = w[gi] if gi >= 0 else 0.0
             if gw > 0:
                 gx, gy = G[gi]; hw = C['goal_box_k'] * interp(gy, self.depth, C['min_crop_w']) + C['goal_unc']
                 xs = [gx - hw, gx + hw] + ([focus[0]] if ball_ok else []); ys = [gy - hw * 0.6, gy + hw * 0.6] + ([focus[1]] if ball_ok else [])

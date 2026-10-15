@@ -134,7 +134,10 @@ public final class LiveCamera {
     func target(_ g: Int, horizon h: Int) -> Target {
         let s = S[g]; let lb = lastBall(g, horizon: h)
         let ballOk = lb != nil && Double(g - lb!.f) / fps <= C.ballHoldS
-        var c = ballOk ? Pt(C.ballWeight * lb!.p.x + (1 - C.ballWeight) * s.pc.x, C.ballWeight * lb!.p.y + (1 - C.ballWeight) * s.pc.y) : s.pc
+        // after ballHoldS the ball weight fades over ballFadeS instead of dropping to zero (live_cam.py)
+        let fade = ballOk ? 1.0 : (lb != nil && C.ballFadeS > 0 ? max(0.0, 1 - (Double(g - lb!.f) / fps - C.ballHoldS) / C.ballFadeS) : 0.0)
+        let bw = C.ballWeight * fade
+        var c = fade > 0 ? Pt(bw * lb!.p.x + (1 - bw) * s.pc.x, bw * lb!.p.y + (1 - bw) * s.pc.y) : s.pc
         let lo = Stats.interp(c.y, depth, C.minCropW), hi = Stats.interp(c.y, depth, C.maxCropW)
         var cw = Stats.clip(s.spread * C.spreadK, lo, hi)
         if !ballOk {
@@ -143,14 +146,25 @@ public final class LiveCamera {
         }
         var gw = 0.0, gi = -1
         if let G = s.goals {
-            let D = Stats.hypot(G[1].x - G[0].x, G[1].y - G[0].y); let focus = ballOk ? lb!.p : s.pc
+            let D = Stats.hypot(G[1].x - G[0].x, G[1].y - G[0].y); let focus = fade > 0 ? Pt(fade * lb!.p.x + (1 - fade) * s.pc.x, fade * lb!.p.y + (1 - fade) * s.pc.y) : s.pc
+            // players in the goal zone averaged over znAvgS (the instant count jumps 1–5 and moved the target ~225 px each)
+            let zw = max(1, Int(C.znAvgS * fps)), j0 = max(0, g - zw + 1)
+            var znm = [0.0, 0.0]
+            for j in j0...g { znm[0] += Double(S[j].zn[0]); znm[1] += Double(S[j].zn[1]) }
+            znm = znm.map { $0 / Double(g - j0 + 1) }
+            var w = [0.0, 0.0]
             for k in 0..<2 {
                 let d = Stats.hypot(focus.x - G[k].x, focus.y - G[k].y) / D
                 let wk = Stats.clip((C.goalZone[1] - d) / (C.goalZone[1] - C.goalZone[0]), 0, 1)
-                var wa = Stats.clip((Double(s.zn[k]) - s.base[k] - 1) / (C.goalAttackN - 1), 0, 1)
+                var wa = Stats.clip((znm[k] - s.base[k] - 1) / (C.goalAttackN - 1), 0, 1)
                 if ballOk && d > C.goalZone[1] { wa *= 0.3 }
-                if max(wk, wa) > gw { gw = max(wk, wa); gi = k }
+                w[k] = max(wk, wa)
             }
+            gi = w[1] > w[0] ? 1 : (w[0] > 0 ? 0 : -1)
+            // sticky goal: the other one only when its weight is more than giKeep higher (equal counts flipped the camera)
+            let prev = GI.last ?? -1
+            if C.giKeep > 0 && prev >= 0 && w[prev] > 0 && w[prev] >= (gi >= 0 ? w[gi] : 0) - C.giKeep { gi = prev }
+            gw = gi >= 0 ? w[gi] : 0
             if gw > 0 {
                 let gx = G[gi].x, gy = G[gi].y; let hw = C.goalBoxK * Stats.interp(gy, depth, C.minCropW) + C.goalUnc
                 var xs = [gx - hw, gx + hw], ys = [gy - hw * 0.6, gy + hw * 0.6]

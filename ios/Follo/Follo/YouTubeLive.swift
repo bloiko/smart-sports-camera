@@ -6,7 +6,7 @@ import Foundation
 struct LiveTarget { let broadcastId: String; let rtmpsURL: String; let streamKey: String; let watchURL: String }
 
 enum YouTubeLive {
-    static func createBroadcast(token: String, title: String, privacy: String = "unlisted") async throws -> LiveTarget {
+    static func createBroadcast(token: String, title: String, privacy: String = YouTubeLive.defaultPrivacy) async throws -> LiveTarget {
         let start = ISO8601DateFormatter().string(from: Date().addingTimeInterval(15))
         let b = try await post(token, "liveBroadcasts?part=snippet,status,contentDetails", [
             "snippet": ["title": title, "scheduledStartTime": start],

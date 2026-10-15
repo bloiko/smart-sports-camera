@@ -18,7 +18,7 @@ python src/golive.py work/m1/game.mp4 work/m1/live/live_B2.npz --title "Smart ca
 ```
 
 - First run opens the browser for consent; the token is stored in `secrets/token.json`.
-- The script prints the `youtu.be` link; open it on a phone to see the delay and quality. The broadcast is unlisted by default (`--privacy public|private|unlisted`), starts automatically when data arrives and is closed when the script ends.
+- The script prints the `youtu.be` link; open it on a phone to see the delay and quality. The broadcast is private by default — only the channel owner sees it, subscribers get no notification (`--privacy public|private|unlisted`). For tests a separate brand channel is safest, starts automatically when data arrives and is closed when the script ends.
 - `CAMERA_PATH.npz` comes from `src/live_sim.py` (buffer 2 s); `--from` is the start second of the video.
 - Encoding: H.264 via VideoToolbox, 4.5 Mbit/s, keyframe every 2 s, AAC 128 kbit/s — YouTube's recommendations for 1080p30.
 

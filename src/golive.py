@@ -4,7 +4,7 @@
 і посилання на трансляцію. Ключі стріму не показуються і не зберігаються у репозиторії.
 
 Використання:
-  python src/golive.py VIDEO CAMERA_PATH.npz [--title "Test match"] [--from 60] [--privacy unlisted]
+  python src/golive.py VIDEO CAMERA_PATH.npz [--title "Test match"] [--from 60] [--privacy private]
   VIDEO — записане відео (імітація камери), CAMERA_PATH.npz — траєкторія live-камери (live_sim.py, буфер 2 с).
 
 Потрібно один раз: secrets/client_secret.json з Google Cloud (OAuth client, тип Desktop, YouTube Data API v3
@@ -77,7 +77,7 @@ def stream(video, path, url, key, t0):
 def main():
     video, path = sys.argv[1], sys.argv[2]
     yt = youtube()
-    bid, url, key, link = create_broadcast(yt, arg('--title', 'Smart camera test'), arg('--privacy', 'unlisted'))
+    bid, url, key, link = create_broadcast(yt, arg('--title', 'Smart camera test'), arg('--privacy', 'private'))
     print(f'Трансляція створена: {link}  (відкрий на телефоні; стрім стартує автоматично)', flush=True)
     try:
         stream(video, path, url, key, float(arg('--from', 0)))

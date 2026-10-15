@@ -153,6 +153,11 @@ struct SetupView: View {
                 }
                 else if live == nil { status = "Без YouTube: лише запис (додай Google Sign-In)" }
                 if !resume { score.newMatch() }
+                // debug: --clock H:MM:SS ставить тайм і час після старту (перевірка табло з Mac)
+                if let i = CommandLine.arguments.firstIndex(of: "--clock"), i + 1 < CommandLine.arguments.count {
+                    let p = CommandLine.arguments[i + 1].split(separator: ":").compactMap { Int($0) }
+                    if p.count == 3 { score.half = p[0]; score.setClock(Double(p[1] * 60 + p[2])) }
+                }
                 score.push(to: ls.runner)
                 cam.startRecording(); startedAt = resume ? ls.saved?.startedAt ?? Date() : Date()
                 if let l = live {

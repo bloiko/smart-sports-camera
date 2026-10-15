@@ -41,6 +41,8 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
 
 ### 3e. Scoreboard on the stream (owner, 2026-10-15)
 - **Done 2026-10-15:** score bug burned into the 1080p stream, top left (team colour, name, score, match clock); "Команди" before the game (name, jersey colour from 10 swatches, show/hide); during the game big +/− for each team, hold the clock to restart it at kick-off; state survives a crash. Code: `FolloCore/Scoreboard.swift`, app `ScoreViews.swift`; look on the Mac: `follosim scoreboard OUT.png`. Checked on the phone with the test video.
+- **Done 2026-10-16:** half (1Т/2Т), half length, manual clock time, pause for half-time (`ClockSheet`); checked on the phone (`--clock 2:67:30` debug argument).
+- **Remote control (owner asks, ideas given 2026-10-16):** a web page served by the camera phone over its hotspot (any second phone, no install), Multipeer between two iPhones with Follo, commands in the YouTube live chat (after Google Sign-In), a Bluetooth shutter remote for +1. Owner to choose.
 - **Next:** suggest jersey colours automatically from the colours sampled in the first minutes (`Jersey.samples`), the owner only confirms; propose "Goal for …?" when the camera's goal mode sees a likely goal (one tap to accept, never automatic); the score in the highlight clips; half-time (clock pause, 2nd half from 45:00).
 
 ### 3b. Live: next steps

@@ -27,7 +27,7 @@ In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position 
 
 ## Scoreboard (2026-10-15)
 
-The stream shows a TV-style score bug in the top left corner of the 1080p picture: colour stripe of each team, short name (12 characters), score, match clock. Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has a score bar with big − and + per team (a wrong tap is undone with −), and holding the clock restarts it at the kick-off whistle. A new Go live starts at 0:0; resuming after a crash keeps the score.
+The stream shows a TV-style score bug in the top left corner of the 1080p picture: colour stripe of each team, short name (12 characters), score, match clock. Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has a score bar with big − and + per team (a wrong tap is undone with −), and the "Час і тайм" button opens a sheet to pick the half (1st/2nd), the half length (10–45 min) and any clock time (late arrival), with pause/continue for half-time; switching to the 2nd half sets the clock to the half length (45:00). The bug shows "1Т 23:15". A new Go live starts at 0:0; resuming after a crash keeps the score.
 
 ## Name
 

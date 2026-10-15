@@ -6,6 +6,13 @@ import Foundation
 struct LiveTarget { let broadcastId: String; let rtmpsURL: String; let streamKey: String; let watchURL: String }
 
 enum YouTubeLive {
+    /// Тестові збірки — private (бачить лише власник каналу, без сповіщень підписникам); реліз — unlisted.
+    #if DEBUG
+    static let defaultPrivacy = "private"
+    #else
+    static let defaultPrivacy = "unlisted"
+    #endif
+
     static func createBroadcast(token: String, title: String, privacy: String = YouTubeLive.defaultPrivacy) async throws -> LiveTarget {
         let start = ISO8601DateFormatter().string(from: Date().addingTimeInterval(15))
         let b = try await post(token, "liveBroadcasts?part=snippet,status,contentDetails", [

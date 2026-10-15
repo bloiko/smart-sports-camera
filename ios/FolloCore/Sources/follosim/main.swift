@@ -44,6 +44,18 @@ case "frames":   // follosim frames VIDEO — sample timestamps as AVAssetReader
         if CMSampleBufferGetNumSamples(sb) > 0 { if n < 4 { first.append(String(format: "%.3f", CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))) }; n += 1 }
     }
     print("samples \(n), first PTS \(first), track timeRange start \(CMTimeGetSeconds(t.timeRange.start)) segments \(t.segments.prefix(3).map { "\(CMTimeGetSeconds($0.timeMapping.source.start))→\(CMTimeGetSeconds($0.timeMapping.target.start)) empty \($0.isEmpty)" })")
+case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
+    var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
+    let states: [(String, Int, Int, ScoreExtras)] = [
+        ("play", 1, 0, ScoreExtras(clock: "23:15", half: 1)), ("added", 2, 1, ScoreExtras(clock: "90:00", half: 2, added: 3)),
+        ("break", 1, 1, ScoreExtras(clock: "45:00", half: 1, phase: "ПЕРЕРВА")), ("goal", 2, 1, ScoreExtras(clock: "67:42", half: 2, goalFor: 0))]
+    for style in ScoreStyle.allCases { for (name, h, a, ex) in states {
+        st.homeGoals = h; st.awayGoals = a
+        let img = Scoreboard.renderStyled(st, style: style, extras: ex)!
+        let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(args[2])/\(style.rawValue)_\(name).png") as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst)
+    } }
+    print("written to \(args[2])")
 case "scoreboard":   // follosim scoreboard OUT.png — the score bug as the stream shows it (for a look on the Mac)
     var st = ScoreState(home: ScoreTeam(name: "Tsukuba", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "Kyiv United FC", r: 0.1, g: 0.35, b: 0.9))
     st.homeGoals = 2; st.awayGoals = 1

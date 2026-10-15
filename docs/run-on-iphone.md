@@ -35,7 +35,7 @@ Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme Follo
 
 ## Testing at home without a pitch
 
-`python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac. Put the phone on a tripod 60–80 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.
+`python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac, cropped to the pitch and stretched to fill the screen (`--keep` keeps the aspect ratio; the panorama is ~3.8:1, so unstretched it is a thin strip). Put the phone 25–35 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.
 
 ## Black camera while the phone screen is shown on the Mac
 

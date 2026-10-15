@@ -33,6 +33,23 @@ Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme Follo
 - Build errors in Swift files: send the first red line to Claude. `ios/FolloCore` and `LiveCameraRunner.swift` compile on the Mac (`ios/FolloCore/build_mac.sh`); the UIKit files (`SetupView`, `Streamer`, `CameraSession`, `LiveSession`) were written without compiling.
 - "Camera: … models players/ball.mlmodelc" at Go live: step 4b was skipped.
 
+## Test video instead of the camera (debug builds only)
+
+The app can read a recorded match from a file instead of the camera. Everything else is the real app: position check,
+Go live, virtual camera, recording, streaming. Frames come in real time, in a loop. Release builds never show it.
+
+```bash
+xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer --domain-identifier com.bohdanloiko.follo --source ~/Downloads/132877.mp4 --destination Documents/testvideo/m2.mp4
+```
+
+```bash
+xcrun devicectl device process launch --terminate-existing --device <UDID> com.bohdanloiko.follo --autostart --video m2.mp4 --golive
+```
+
+- `--video NAME` picks the file (remembered); `--camera` goes back to the camera. On the phone: the Камера / Відео switch on the setup screen.
+- `--golive` presses GO LIVE once the position check passes (no YouTube token in debug builds: recording and virtual camera only).
+- The log (`Documents/debug/log.txt`) prints every 10 s: frames in/out, ball share, goals known, thermal state, memory.
+
 ## Testing at home without a pitch
 
 `python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac, cropped to the pitch and stretched to fill the screen (`--keep` keeps the aspect ratio; the panorama is ~3.8:1, so unstretched it is a thin strip). Put the phone 25–35 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.

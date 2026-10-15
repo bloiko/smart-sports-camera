@@ -14,6 +14,10 @@ func die(_ s: String) -> Never { FileHandle.standardError.write((s + "\n").data(
 guard args.count >= 2 else { die("usage: follosim camera DIR B") }
 
 switch args[1] {
+case "position":   // follosim position work/mN/live_pre — the Go live position check on a saved environment
+    let e = try LiveEnv.load(dir: args[2])
+    let fb = e.fm?.farBand
+    print("far band \(fb.map { "\(Int($0.0))..\(Int($0.1)) of \(e.W)" } ?? "none"): \(e.positionProblem ?? "ok")")
 case "camera":
     guard args.count >= 4, let B = Double(args[3]) else { die("usage: follosim camera DIR B") }
     let dir = args[2]; let swift = args.contains("--swift")      // --swift: Swift detections and environment instead of Python's

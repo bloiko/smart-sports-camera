@@ -59,7 +59,7 @@ Status: ☐ not started, ◐ in progress, ☑ done. 2026-10-14: the whole app co
 **Critical**
 - ◐ 8. RTMPS streaming (HaishinKit, code, untested) and Core ML virtual camera on the phone (done 2026-10-12: `ios/FolloCore` = Swift port of the live camera, identical path to Python on 3 matches; Core ML models exported; `LiveCameraRunner.swift` wires camera frames → detection → 2 s buffer → 1080p crop → streamer; not yet run on a phone)
 - ☑ 1. Reconnect (code in `Streamer.swift`, untested on a phone) to the same broadcast after a call, network loss or crash
-- ☑ 2. Frame buffer (code, untested) up to 60 s during a network drop
+- ◐ 2. Frame buffer during a network drop: raw 1080p frames are ~8 MB each, so 60 s (12 GB) crashed the app on the phone (2026-10-15); now capped at 2 s. To do: buffer encoded H.264 instead (60 s ≈ 34 MB)
 - ☑ 3. "Resume the live?" (code, untested) after a crash or reboot
 - ☑ 4. Thermal steps (code, untested): 25 fps → bitrate → sparser detection (`setDetectEvery`)
 - ☑ 5. Adaptive bitrate (code, untested) 4.5 → 3 → 2 Mbit/s

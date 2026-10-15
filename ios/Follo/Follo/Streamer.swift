@@ -87,9 +87,11 @@ final class Streamer: ObservableObject {
         if state == .live {
             let sb = CMSampleBuffer.from(pixelBuffer, time: time)
             Task { await stream.append(sb) }
-        } else {
+        } else if state != .idle && state != .ended {          // без трансляції (лише запис) нічого не буферизуємо
             buffer.append((pixelBuffer, time))
-            let limit = Int(bufferSeconds * fps)
+            // Сирий кадр 1080p BGRA ≈ 8 МБ: 60 с — це 12 ГБ, iOS вбиває застосунок. Поки що тримаємо ~2 с (≈ 500 МБ);
+            // 60 с можливі лише для вже стиснутих кадрів (4.5 Мбіт/с × 60 с ≈ 34 МБ) — див. docs/live-edge-cases.md.
+            let limit = min(Int(bufferSeconds * fps), Int(2 * fps))
             if buffer.count > limit { buffer.removeFirst(buffer.count - limit); droppedSeconds += 1 / fps }
         }
     }

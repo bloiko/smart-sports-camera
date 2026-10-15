@@ -146,7 +146,9 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 ## Phase 3: iOS app (started 2026-10-12)
 
-**Status:** Xcode project `ios/FolloApp` compiles for simulator and device (2026-10-14, Xcode 27); sources in `ios/Follo/Follo` are copied into it (keep both in sync). Not yet run on a phone. Design mockup of all 10 screens: `docs/app-design.md`.
+**Status:** runs on the owner's iPhone 15 (iOS 27). Xcode project `ios/FolloApp`; sources in `ios/Follo/Follo` are copied into it (keep both in sync).
+
+**Done 2026-10-15 (first runs on the phone):** camera, position check and a full live run (no YouTube yet) on the phone. A debug-only test-video source feeds a recorded match instead of the camera (`docs/run-on-iphone.md`). Match 2 on the phone: position check in 0.2 s, live at the full 25 fps in real time, memory flat at ~470 MB, goals found after ~40 s, thermal "ok" over 80 s. Fixed on the way: the position check failed real matches (now only the far quarter of the pitch must keep off the frame sides; m1–m3 pass), a 12 GB stream buffer of raw frames (capped at 2 s), a 1-second timer that never fired, a leak in the file reader. Design mockup of all 10 screens: `docs/app-design.md`.
 
 **Done (code only, not compiled: no Xcode on the Mac yet):** chunked 4K recording, YouTube Live API, RTMPS streamer with 60 s buffer and reconnect to the same broadcast, resume after crash, thermal and battery steps, adaptive bitrate, preflight checks, hold-to-stop. Docs: `docs/app-design.md`, `docs/live-edge-cases.md`, `docs/run-on-iphone.md`, `docs/youtube-live.md`.
 
@@ -164,7 +166,7 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 **Done 2026-10-12 (screens 1–4):** onboarding with 3 cards and the permission requests, "My matches" with the match list (date, link, clips, goals, 4K kept or deleted), routing in `FolloApp.swift`; the result screen writes the match record. Google Sign-In is a placeholder until the SDK is added.
 
-**To do:** everything on a real phone (owner: Xcode, first run); then the streamer buffer of encoded frames, Google Sign-In, settings screen (10), edge-case items 15–21. Blocked on the owner: Xcode, first run, own footage, Google Cloud project.
+**To do:** live run with YouTube on the phone; a long test-video run (thermal, battery over 90 min); compare the phone camera path with `live_sim.py` on the same file; then the streamer buffer of encoded frames, Google Sign-In, settings screen (10), edge-case items 15–21. Blocked on the owner: Xcode, first run, own footage, Google Cloud project.
 
 **Difficulties**
 - Swift on this Mac: the Command Line Tools 16.2 cannot build any Swift (stale `module.modulemap`; SwiftPM manifests do not link). `build_mac.sh` calls swiftc with a VFS overlay instead.

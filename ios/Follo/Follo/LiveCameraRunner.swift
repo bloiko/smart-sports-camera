@@ -22,7 +22,7 @@ final class LiveCameraRunner {
     /// Те саме для «погляду глядача» на екрані (пункт 10).
     var onPreview: ((CVPixelBuffer, CMTime) -> Void)?
     /// For the icon row: ball found share, goals known, detection ms per frame.
-    private(set) var ballPasses = 0, ballFound = 0
+    private(set) var ballPasses = 0, ballFound = 0, outFrames = 0, inFrames = 0
     var goalsKnown: Bool { cam?.goals != nil }
     var isLive: Bool { cam != nil }
     private(set) var knownPitch = false
@@ -95,7 +95,7 @@ final class LiveCameraRunner {
     func push(_ sb: CMSampleBuffer) {
         guard let pipe = pipe, let cam = cam, let pb = CMSampleBufferGetImageBuffer(sb) else { return }
         let t = CMSampleBufferGetPresentationTimeStamp(sb)
-        let f = frame; frame += 1
+        let f = frame; frame += 1; inFrames += 1
         if let copy = copyFrame(pb) { ring[f] = (copy, t) }
         let rec = pipe.process(frame: f, image: CIImage(cvPixelBuffer: pb), grey: { Image8.grey(from: pb) }, patch: { Image8.bgrPatch(pb, x0: $0, y0: $1, w: $2, h: $3) })
         if rec.rois != nil { ballPasses += 1; if rec.ball != nil { ballFound += 1 } }
@@ -110,7 +110,7 @@ final class LiveCameraRunner {
         var img = CIImage(cvPixelBuffer: src).cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
         img = img.transformed(by: CGAffineTransform(scaleX: 1920 / fr.cw, y: 1080 / fr.ch))
         if outPool == nil { outPool = Self.pool(w: 1920, h: 1080, format: kCVPixelFormatType_32BGRA, count: 6) }
-        if let out = render(img, w: 1920, h: 1080, pool: outPool) { onOutput?(out, t); onPreview?(out, t) }
+        if let out = render(img, w: 1920, h: 1080, pool: outPool) { outFrames += 1; onOutput?(out, t); onPreview?(out, t) }
     }
 
     private func copyFrame(_ pb: CVPixelBuffer) -> CVPixelBuffer? {

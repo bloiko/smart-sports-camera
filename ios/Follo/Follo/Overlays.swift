@@ -6,11 +6,12 @@ import AVFoundation
 struct DimOverlay: View {
     @Binding var lastTouch: Date
     @State private var now = Date()
+    @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     var body: some View {
         let dim = now.timeIntervalSince(lastTouch) > 10
         Color.black.opacity(dim ? 0.97 : 0).ignoresSafeArea().allowsHitTesting(dim)
             .onTapGesture { lastTouch = Date() }
-            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now = $0 }
+            .onReceive(ticker) { now = $0 }
             .animation(.easeInOut(duration: 0.5), value: dim)
     }
 }

@@ -28,6 +28,8 @@ struct SetupView: View {
     @State var lastTouch = Date()                                   // пункт 11
     @State var viewer = false
     @State var lastDbg = ""
+    // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
+    @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @Environment(\.scenePhase) var scenePhase                                       // пункт 10
     @State var showAdvice = !UserDefaults.standard.bool(forKey: "advice.shown")   // пункти 9, 14
     @State var result: Bool = false                                 // екран результату після Стоп
@@ -60,6 +62,12 @@ struct SetupView: View {
                     .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
             Text(error ?? cam.cameraError ?? status).font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
+            if !cam.isRecording, !CameraSession.testVideos.isEmpty {      // лише debug: тестове відео замість камери
+                Picker("Джерело", selection: Binding(get: { cam.testVideo }, set: { cam.setSource($0); ls.runner.resetPosition() })) {
+                    Text("Камера").tag(URL?.none)
+                    ForEach(CameraSession.testVideos, id: \.self) { Text("Відео \($0.deletingPathExtension().lastPathComponent)").tag(URL?.some($0)) }
+                }.pickerStyle(.segmented)
+            }
             if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
             if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
             if !cam.isRecording, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
@@ -87,7 +95,12 @@ struct SetupView: View {
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
         .onAppear {
-            DebugLog.reset(); cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
+            DebugLog.reset()
+            // debug: --video NAME з Mac або останній вибір у перемикачі
+            if let i = CommandLine.arguments.firstIndex(of: "--video"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.testVideo") }
+            if CommandLine.arguments.contains("--camera") { UserDefaults.standard.removeObject(forKey: "debug.testVideo") }
+            if let n = UserDefaults.standard.string(forKey: "debug.testVideo") { cam.testVideo = CameraSession.testVideos.first { $0.lastPathComponent == n } }
+            cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
             ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
             // до ефіру: кадри для перевірки позиції (маска поля); під час ефіру: віртуальна камера
             cam.frameHandler = { [ls] sb in
@@ -100,8 +113,14 @@ struct SetupView: View {
             if ph == .background { cam.pause() } else if ph == .active { cam.resume() }
         }
         .onDisappear { cam.pause() }
+        .onChange(of: cam.sourceFps, initial: true) { _, f in ls.runner.fps = f }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(ticker) { _ in
+            // debug: --golive натискає GO LIVE сам, щойно перевірка позиції пройшла (тест з Mac без дотику)
+            if startedAt == nil, !cam.isRecording, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); go() }
+            if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
+                DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) thermal \(thermalText) mem \(DebugLog.memMB()) MB")
+            }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
                 status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }

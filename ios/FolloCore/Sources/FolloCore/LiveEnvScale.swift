@@ -32,8 +32,32 @@ extension LiveEnv {
     public var positionProblem: String? {
         guard let fm = fm, let b = fm.bounds else { return "No pitch found: point the camera at the field" }
         if fm.share < 0.15 { return "The pitch is too small in the frame: move closer or use the wide camera" }
-        if b.x0 < W / 50 { return "The left goal may be out of frame: turn the phone left" }
-        if b.x1 > W - W / 50 { return "The right goal may be out of frame: turn the phone right" }
+        _ = b
+        // Goals stand at the far corners. Near the camera the grass legitimately reaches the frame sides (wide lens,
+        // panoramas m1/m2), so only the far quarter of the pitch must keep a margin from the left/right edges.
+        guard let (l, r) = fm.farBand else { return "No pitch found: point the camera at the field" }
+        let m = Double(fm.w) / 33
+        if l < m { return "The left goal may be out of frame: turn the phone left" }
+        if r > Double(fm.w - 1) - m { return "The right goal may be out of frame: turn the phone right" }
         return nil
+    }
+}
+
+extension Mask {
+    /// Left/right extent of the far quarter of the pitch (rows with ≥ 5% grass; 10th/90th percentile of row ends,
+    /// so stray blobs of trees do not count). Same rule as tried in Python on m1–m3 and cropped masks.
+    public var farBand: (Double, Double)? {
+        let minCount = max(1, w / 20)
+        var counts = [Int](repeating: 0, count: h)
+        for y in 0..<h { var c = 0; for x in 0..<w where data[y * w + x] != 0 { c += 1 }; counts[y] = c }
+        guard let y0 = counts.firstIndex(where: { $0 >= minCount }), let y1 = counts.lastIndex(where: { $0 >= minCount }) else { return nil }
+        var L: [Int] = [], R: [Int] = []
+        for y in y0..<(y0 + max(1, (y1 - y0) / 4)) where counts[y] >= minCount {
+            var l = 0; while data[y * w + l] == 0 { l += 1 }
+            var r = w - 1; while data[y * w + r] == 0 { r -= 1 }
+            L.append(l); R.append(r)
+        }
+        L.sort(); R.sort()
+        return (Double(L[Int(Double(L.count - 1) * 0.1)]), Double(R[Int(Double(R.count - 1) * 0.9)]))
     }
 }

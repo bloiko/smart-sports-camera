@@ -14,10 +14,14 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var previewImage: UIImage?
     @Published var useWide = false        // 1× замість 0.5×: мало світла (автоматично) або стенд удома
     @Published var lowLight: String?      // підказка на екрані, коли кадр недоекспонований
+    @Published var testVideo: URL?        // debug: відео замість камери (див. startFile)
+    @Published var sourceFps = 30.0
+    var fileGen = 0, filePaused = false
 
     /// Фон: зупинити камеру, інакше вона лишається зайнятою і інші застосунки (та наступний запуск) бачать чорне.
-    func pause() { queue.async { if self.session.isRunning { self.session.stopRunning(); DebugLog.log("session paused") } } }
+    func pause() { if testVideo != nil { filePaused = true; return }; queue.async { if self.session.isRunning { self.session.stopRunning(); DebugLog.log("session paused") } } }
     func resume() {
+        if testVideo != nil { filePaused = false; return }
         queue.async {
             guard !self.session.isRunning else { return }
             if !self.session.inputs.isEmpty { self.session.startRunning() }
@@ -75,6 +79,7 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var cameraError: String?
 
     func configure() {
+        if let v = testVideo { startFile(v); return }
         AVCaptureDevice.requestAccess(for: .video) { ok in
             DebugLog.log("camera permission \(ok)")
             guard ok else { DispatchQueue.main.async { self.cameraError = "Немає дозволу на камеру: Параметри → Follo → Камера" }; return }
@@ -175,6 +180,11 @@ final class CameraSession: NSObject, ObservableObject {
 
 extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        handle(sampleBuffer)
+    }
+
+    /// Один кадр з камери або з тестового відео: запис, конвеєр, прев'ю. На черзі камери.
+    func handle(_ sampleBuffer: CMSampleBuffer) {
         writer?.append(sampleBuffer)
         frameHandler?(sampleBuffer)
         previewCount += 1
@@ -223,23 +233,26 @@ final class ChunkWriter {
 
     static var dir: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("chunks") }
 
-    private func open(at time: CMTime) {
+    private func open(at time: CMTime, w: Int, h: Int) {
         index += 1
         let url = Self.dir.appendingPathComponent(String(format: "chunk_%03d.mp4", index))
         try? FileManager.default.removeItem(at: url)
-        guard let w = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
+        let bitRate: Int = 30_000_000 * (w * h) / (3840 * 2160)
+        guard let wr = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
         let i = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: 3840, AVVideoHeightKey: 2160,
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 30_000_000]])
+            AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: w, AVVideoHeightKey: h,
+            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: bitRate]])
         i.expectsMediaDataInRealTime = true
-        w.add(i); w.startWriting(); w.startSession(atSourceTime: time)
-        writer = w; input = i; chunkStart = time
+        wr.add(i); wr.startWriting(); wr.startSession(atSourceTime: time)
+        writer = wr; input = i; chunkStart = time
     }
 
     func append(_ sb: CMSampleBuffer) {
         let t = CMSampleBufferGetPresentationTimeStamp(sb)
-        if writer == nil { open(at: t) }
-        if let s = chunkStart, CMTimeGetSeconds(CMTimeSubtract(t, s)) >= chunkSeconds { finish(); open(at: t) }
+        guard let pb = CMSampleBufferGetImageBuffer(sb) else { return }
+        let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)   // 4K з камери; тестове відео — свій розмір
+        if writer == nil { open(at: t, w: w, h: h) }
+        if let s = chunkStart, CMTimeGetSeconds(CMTimeSubtract(t, s)) >= chunkSeconds { finish(); open(at: t, w: w, h: h) }
         if input?.isReadyForMoreMediaData == true { input?.append(sb) }
     }
 
@@ -249,5 +262,70 @@ final class ChunkWriter {
         let n = index
         w.finishWriting { self.onChunk(n) }
         writer = nil; input = nil
+    }
+}
+
+/// Тестовий режим (лише debug-збірки): кадри з відео в Documents/testvideo/ замість камери, у реальному часі і по колу.
+/// Далі той самий конвеєр, що й для камери: перевірка позиції, віртуальна камера, запис, стрім. Відео копіюється
+/// з Mac: `devicectl device copy to --domain-type appDataContainer ... --destination Documents/testvideo/m2.mp4`.
+extension CameraSession {
+    static var testVideoDir: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("testvideo") }
+    static var testVideos: [URL] {
+        #if DEBUG
+        let all = (try? FileManager.default.contentsOfDirectory(at: testVideoDir, includingPropertiesForKeys: nil)) ?? []
+        return all.filter { ["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        #else
+        return []
+        #endif
+    }
+
+    /// Перемкнути джерело: nil — камера, інакше файл. Зупиняє поточне джерело.
+    func setSource(_ url: URL?) {
+        guard url != testVideo else { return }
+        fileGen += 1                                            // зупиняє потік читання файлу
+        if testVideo == nil { queue.async { if self.session.isRunning { self.session.stopRunning() } } }
+        testVideo = url; previewImage = nil; cameraError = nil
+        UserDefaults.standard.set(url?.lastPathComponent, forKey: "debug.testVideo")
+        DebugLog.log("source \(url?.lastPathComponent ?? "camera")")
+        configure()
+    }
+
+    func startFile(_ url: URL) {
+        fileGen += 1; let gen = fileGen; filePaused = false
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first else { cameraError = "Не можу прочитати \(url.lastPathComponent)"; return }
+        let fps = Double(track.nominalFrameRate) > 0 ? Double(track.nominalFrameRate) : 30
+        let size = track.naturalSize
+        sourceFps = fps
+        formatInfo = "Тестове відео \(url.lastPathComponent) \(Int(size.width))×\(Int(size.height)) \(Int(fps)) fps"
+        DebugLog.log("test video \(url.lastPathComponent) \(Int(size.width))x\(Int(size.height)) \(fps) fps")
+        Thread.detachNewThread { [weak self] in
+            var offset = CMTime.zero, t0 = CACurrentMediaTime(), dropped = 0
+            while let self, self.fileGen == gen {
+                guard let reader = try? AVAssetReader(asset: asset) else { break }
+                let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                    kCVPixelBufferIOSurfacePropertiesKey as String: [:]])
+                out.alwaysCopiesSampleData = false
+                reader.add(out); reader.startReading()
+                var last = offset
+                while self.fileGen == gen { let more: Bool = autoreleasepool {   // потік без run loop: без пулу кадри не звільняються
+                    guard let sb = out.copyNextSampleBuffer() else { return false }
+                    while self.filePaused && self.fileGen == gen { Thread.sleep(forTimeInterval: 0.1); t0 += 0.1 }
+                    let pts = CMTimeAdd(CMSampleBufferGetPresentationTimeStamp(sb), offset); last = pts
+                    let wait = t0 + CMTimeGetSeconds(pts) - CACurrentMediaTime()
+                    if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+                    else if wait < -0.1 { dropped += 1; if dropped % 100 == 1 { DebugLog.log("test video: late, dropped \(dropped)") }; return true }  // як alwaysDiscardsLateVideoFrames
+                    var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: CMTimeScale(fps.rounded())), presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+                    var copy: CMSampleBuffer?
+                    CMSampleBufferCreateCopyWithNewTiming(allocator: nil, sampleBuffer: sb, sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleBufferOut: &copy)
+                    if let c = copy { self.queue.sync { self.handle(c) } }
+                    return true
+                }; if !more { break } }
+                reader.cancelReading()
+                offset = CMTimeAdd(last, CMTime(value: 1, timescale: CMTimeScale(fps.rounded())))   // по колу, час іде далі
+                if self.fileGen == gen { DebugLog.log("test video: loop") }
+            }
+        }
     }
 }

@@ -195,7 +195,11 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
                         exp = String(format: " iso %.0f/%.0f shutter 1/%.0f offset %+.1fEV", iso, maxISO, 1 / CMTimeGetSeconds(d.exposureDuration), off)
                         lowLightCheck(dark: off < -2 && iso >= 0.9 * maxISO && mean < 30)
                     }
-                    DebugLog.log(String(format: "luma mean %.1f sd %.1f max %d", mean, sd, mx) + exp + " mem \(DebugLog.memMB()) MB")
+                    // екран транслюється/записується (Device Hub, iPhone Mirroring, AirPlay, запис екрана)
+                    let captured = DispatchQueue.main.sync { UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.isCaptured }.contains(true) }
+                    DebugLog.log(String(format: "luma mean %.1f sd %.1f max %d", mean, sd, mx) + exp + " screenCaptured \(captured) mem \(DebugLog.memMB()) MB")
+                    if sd < 0.5 && mean < 20 { DispatchQueue.main.async { self.cameraError = captured ? "iOS ховає камеру, поки екран телефона транслюється або записується (Device Hub, Mirroring). Закрий трансляцію." : "Камера віддає чорний кадр" } }
+                    else if self.cameraError?.hasPrefix("iOS ховає") == true || self.cameraError == "Камера віддає чорний кадр" { DispatchQueue.main.async { self.cameraError = nil } }
                 }
             }
             if previewCount == 6 { DebugLog.log("first frame \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) fmt \(CVPixelBufferGetPixelFormatType(pb))") }

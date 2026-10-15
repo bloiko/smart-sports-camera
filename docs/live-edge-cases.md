@@ -17,6 +17,7 @@ Key fact: **iOS stops the camera as soon as the app leaves the screen.** Most ca
 | Battery 20% / 10% / 5% | Dies mid-game | Yellow then red icon and "power bank" hint; at 5% the broadcast is ended cleanly (archive kept) and the chunk is finished |
 | Out of storage | Recording stops | Before start: 90 min of 4K HEVC ≈ 15 GB; offer to delete old wide recordings. During the game the stream has priority: at 1 GB free only the recording stops |
 | Tripod moved / phone taken | Pitch leaves the frame | Position check every 10 s: a sudden field-mask change shows a "camera moved" icon; goals are re-estimated |
+| Screen mirrored or recorded (AirPlay, iPhone Mirroring, Device Hub, screen recording) | iOS gives the app a black camera (confirmed 2026-10-15) | The app detects `isCaptured` + flat black frame and shows "close the screen sharing"; the stream keeps running |
 | Rain, sun in the lens | Detector goes blind | Camera falls back to players or pitch centre; hint shown |
 
 ## Network and YouTube

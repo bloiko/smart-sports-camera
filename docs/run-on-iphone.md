@@ -36,3 +36,14 @@ Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme Follo
 ## Testing at home without a pitch
 
 `python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac. Put the phone on a tripod 60–80 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.
+
+## Black camera while the phone screen is shown on the Mac
+
+If the iPhone screen is mirrored or recorded (Xcode Device Hub, iPhone Mirroring, AirPlay, screen recording), iOS gives every app — including the system Camera — a black camera image (Y = 16 with zero noise, while auto-exposure keeps running). Confirmed 2026-10-15: `screenCaptured true` ↔ black, `false` ↔ normal image, switching within one 2 s sample. Close Device Hub while testing the camera. To see what the app sees, read its debug files from the Mac instead:
+
+```bash
+xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer --domain-identifier com.bohdanloiko.follo --source Documents/debug/log.txt --destination log.txt
+xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer --domain-identifier com.bohdanloiko.follo --source Documents/debug/preview.jpg --destination preview.jpg
+```
+
+The log has one line every 2 s: luma mean/sd, ISO, shutter, exposure offset, `screenCaptured`, memory; plus interruptions, runtime errors and system pressure. Launch straight to the camera screen with `xcrun devicectl device process launch --device <UDID> com.bohdanloiko.follo --autostart` (the phone must be unlocked and the app in front: iOS stops the camera for background apps).

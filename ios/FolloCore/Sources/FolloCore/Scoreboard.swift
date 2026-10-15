@@ -13,9 +13,18 @@ public struct ScoreTeam: Codable, Equatable {
 public struct ScoreState: Codable, Equatable {
     public var home: ScoreTeam, away: ScoreTeam
     public var homeGoals = 0, awayGoals = 0
+    public var homeRed = 0, awayRed = 0              // red cards, shown as small cards next to the club name
     public var shown = true
     public init(home: ScoreTeam = ScoreTeam(name: "Home", r: 1, g: 1, b: 1), away: ScoreTeam = ScoreTeam(name: "Away", r: 0.1, g: 0.35, b: 0.9)) {
         self.home = home; self.away = away
+    }
+    /// Older saved states have no red cards: missing fields take their defaults.
+    public init(from dec: Decoder) throws {
+        let c = try dec.container(keyedBy: CodingKeys.self)
+        home = try c.decode(ScoreTeam.self, forKey: .home); away = try c.decode(ScoreTeam.self, forKey: .away)
+        homeGoals = try c.decodeIfPresent(Int.self, forKey: .homeGoals) ?? 0; awayGoals = try c.decodeIfPresent(Int.self, forKey: .awayGoals) ?? 0
+        homeRed = try c.decodeIfPresent(Int.self, forKey: .homeRed) ?? 0; awayRed = try c.decodeIfPresent(Int.self, forKey: .awayRed) ?? 0
+        shown = try c.decodeIfPresent(Bool.self, forKey: .shown) ?? true
     }
 }
 

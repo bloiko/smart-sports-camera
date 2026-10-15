@@ -48,13 +48,21 @@ case "scoreboards":   // follosim scoreboards DIR — every style in four states
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [
         ("play", 1, 0, ScoreExtras(clock: "23:15", half: 1)), ("added", 2, 1, ScoreExtras(clock: "90:00", half: 2, added: 3)),
-        ("break", 1, 1, ScoreExtras(clock: "45:00", half: 1, phase: "ПЕРЕРВА")), ("goal", 2, 1, ScoreExtras(clock: "67:42", half: 2, goalFor: 0))]
+        ("break", 1, 1, ScoreExtras(clock: "45:00", half: 1, phase: "ПЕРЕРВА")), ("goal", 2, 1, ScoreExtras(clock: "67:42", half: 2, goalFor: 0)),
+        ("red", 2, 1, ScoreExtras(clock: "71:05", half: 2, redFor: 1))]
     for (style, full) in ScoreStyle.allCases.map({ ($0, false) }) + [(.classic, true)] { for (name, h, a, var ex) in states {
-        st.homeGoals = h; st.awayGoals = a; ex.fullNames = full
+        st.homeGoals = h; st.awayGoals = a; ex.fullNames = full; st.homeRed = name == "red" ? 1 : 0; st.awayRed = name == "red" ? 2 : 0
         let img = Scoreboard.renderStyled(st, style: style, extras: ex)!
         let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(args[2])/\(style.rawValue)\(full ? "full" : "")_\(name).png") as CFURL, "public.png" as CFString, 1, nil)!
         CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst)
     } }
+    st.homeGoals = 2; st.awayGoals = 1; st.homeRed = 1; st.awayRed = 2
+    for cs in RedCardStyle.allCases {                     // red card placements on the chosen design
+        var ex = ScoreExtras(clock: "71:05", half: 2, fullNames: true); ex.cards = cs
+        let img = Scoreboard.renderStyled(st, style: .classic, extras: ex)!
+        let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: "\(args[2])/cards_\(cs.rawValue).png") as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst)
+    }
     print("written to \(args[2])")
 case "scoreboard":   // follosim scoreboard OUT.png — the score bug as the stream shows it (for a look on the Mac)
     var st = ScoreState(home: ScoreTeam(name: "Tsukuba", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "Kyiv United FC", r: 0.1, g: 0.35, b: 0.9))

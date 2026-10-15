@@ -14,6 +14,7 @@ final class ScoreModel: ObservableObject {
     @Published var halfMinutes: Int { didSet { UserDefaults.standard.set(halfMinutes, forKey: "score.halfMinutes") } }
     @Published var added: Int { didSet { UserDefaults.standard.set(added, forKey: "score.added") } }      // доданий час, хв (0 — не показувати)
     private var goalFor: Int?, goalUntil = Date.distantPast                                                   // банер «ГОЛ!» 6 с після +
+    private var redFor: Int?, redUntil = Date.distantPast                                                     // банер «ЧЕРВОНА КАРТКА» 6 с
     private var lastKey = ""
 
     init() {
@@ -42,10 +43,16 @@ final class ScoreModel: ObservableObject {
     private func save() { UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: "score.state") }
 
     /// Новий матч: 0:0, годинник з нуля. Назви і кольори лишаються з минулого разу.
-    func newMatch() { state.homeGoals = 0; state.awayGoals = 0; half = 1; added = 0; pausedAt = nil; clockStart = Date() }
+    func newMatch() { state.homeGoals = 0; state.awayGoals = 0; state.homeRed = 0; state.awayRed = 0; half = 1; added = 0; pausedAt = nil; clockStart = Date() }
     func add(home: Bool, _ d: Int) {
         if home { state.homeGoals = max(0, state.homeGoals + d) } else { state.awayGoals = max(0, state.awayGoals + d) }
-        if d > 0 { goalFor = home ? 0 : 1; goalUntil = Date().addingTimeInterval(6) } else { goalUntil = .distantPast }
+        if d > 0 { goalFor = home ? 0 : 1; goalUntil = Date().addingTimeInterval(6); redUntil = .distantPast } else { goalUntil = .distantPast }
+    }
+    /// Червона картка: маленька картка біля назви клубу на табло (до 5), банер на 6 с; − знімає помилкову.
+    func addRed(home: Bool, _ d: Int) {
+        if home { state.homeRed = max(0, min(5, state.homeRed + d)) } else { state.awayRed = max(0, min(5, state.awayRed + d)) }
+        if d > 0 { redFor = home ? 0 : 1; redUntil = Date().addingTimeInterval(6); goalUntil = .distantPast } else { redUntil = .distantPast }
+        DebugLog.log("red cards \(state.homeRed):\(state.awayRed)")
         DebugLog.log("score \(state.homeGoals):\(state.awayGoals)")
     }
 
@@ -53,8 +60,9 @@ final class ScoreModel: ObservableObject {
     func push(to runner: LiveCameraRunner) {
         // червоний блок годинника з таймом, повні назви клубів, +N доданого часу, ПЕРЕРВА на паузі, ГОЛ! 6 с
         let ex = ScoreExtras(clock: seconds.map { Scoreboard.clock($0) }, half: half, added: added > 0 ? added : nil,
-                             phase: pausedAt != nil ? "ПЕРЕРВА" : nil, goalFor: Date() < goalUntil ? goalFor : nil, fullNames: true)
-        let key = "\(state)\(ex.clock ?? "")\(half)\(added)\(ex.phase ?? "")\(ex.goalFor ?? -1)"
+                             phase: pausedAt != nil ? "ПЕРЕРВА" : nil, goalFor: Date() < goalUntil ? goalFor : nil, fullNames: true,
+                             redFor: Date() < redUntil ? redFor : nil)
+        let key = "\(state)\(ex.clock ?? "")\(half)\(added)\(ex.phase ?? "")\(ex.goalFor ?? -1)\(ex.redFor ?? -1)"
         guard key != lastKey else { return }
         lastKey = key; runner.setScoreboard(Scoreboard.renderStyled(state, style: .classic, extras: ex))
     }
@@ -124,6 +132,14 @@ struct ScoreBar: View {
                 Button { score.add(home: home, -1) } label: { Image(systemName: "minus").frame(width: 36, height: 36) }.buttonStyle(.bordered)
                 Text("\(n)").font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit().frame(minWidth: 34)
                 Button { score.add(home: home, 1) } label: { Image(systemName: "plus").frame(width: 36, height: 36) }.buttonStyle(.borderedProminent)
+            }
+            let red = home ? score.state.homeRed : score.state.awayRed
+            HStack(spacing: 6) {                                               // червоні картки: + і − поруч, щоб виправити помилку
+                Button { score.addRed(home: home, 1) } label: {
+                    HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.red).frame(width: 11, height: 16); Text(red > 0 ? "\(red)" : "+").font(.caption.bold()) }
+                        .frame(height: 26).padding(.horizontal, 6)
+                }.buttonStyle(.bordered)
+                if red > 0 { Button { score.addRed(home: home, -1) } label: { Image(systemName: "minus").font(.caption).frame(height: 26) }.buttonStyle(.bordered) }
             }
         }.frame(maxWidth: .infinity)
     }

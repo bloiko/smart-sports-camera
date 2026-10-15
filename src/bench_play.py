@@ -24,7 +24,11 @@ while True:
         if not ok:
             if '--loop' in sys.argv: cap.set(cv2.CAP_PROP_POS_FRAMES, 0); start = time.time(); f0 = 0; continue
             break
-        cv2.imshow('follo', im[Y0:Y1, X0:X1])
+        fr = im[Y0:Y1, X0:X1]
+        if '--keep' not in sys.argv:   # macOS тримає пропорції навіть з FREERATIO — розтягуємо самі під розмір вікна
+            _, _, ww, wh = cv2.getWindowImageRect('follo')
+            if ww > 0 and wh > 0: fr = cv2.resize(fr, (ww, wh), interpolation=cv2.INTER_LINEAR)
+        cv2.imshow('follo', fr)
         f = int(cap.get(cv2.CAP_PROP_POS_FRAMES)); due = start + (f - f0) / fps; d = due - time.time()
     k = cv2.waitKey(max(1, int(d * 1000)) if not paused else 50) & 0xFF
     if k == ord('q'): break

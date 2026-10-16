@@ -332,6 +332,7 @@ extension CameraSession {
                     if let c = copy { self.queue.sync { self.handle(c) } }
                     return true
                 }; if !more { break } }
+                if reader.status != .completed { DebugLog.log("test video: reader stopped early: status \(reader.status.rawValue) \(reader.error.map { "\($0)" } ?? "")") }
                 reader.cancelReading()
                 offset = CMTimeAdd(last, CMTime(value: 1, timescale: CMTimeScale(fps.rounded())))   // по колу, час іде далі
                 if self.fileGen == gen { DebugLog.log("test video: loop") }

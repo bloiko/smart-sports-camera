@@ -25,17 +25,36 @@ public final class VideoEncoder: @unchecked Sendable {     // VideoToolbox calls
     public private(set) var settings: Settings
     public var onFrame: ((Frame) -> Void)?
     public private(set) var encoded = 0, dropped = 0
+    /// Self-healing (found in a 90-min phone run: after iOS briefly suspended the app the session silently produced
+    /// nothing): the session is recreated after an error status, when frames go in but nothing comes out for
+    /// `watchdogS`, or on request (`reset()`, e.g. when the app returns to the foreground). The next frame is a keyframe.
+    public private(set) var resets = 0, submitted = 0, lastErrorStatus: OSStatus = 0
+    public var onEvent: ((String) -> Void)?
+    public var watchdogS = 2.0
     private var session: VTCompressionSession?
     private let lock = NSLock()
+    private var needsReset = false, lastOutputTime = 0.0, submittedSinceOutput = 0, forceNextKey = false
 
     public init(_ s: Settings) throws {
         settings = s
+        session = try Self.makeSession(s)
+        applyBitrate(s.bitrate)
+        if let sess = session { VTCompressionSessionPrepareToEncodeFrames(sess) }
+        lastOutputTime = ProcessInfo.processInfo.systemUptime
+    }
+
+    /// Recreate the session on the next frame (app back in the foreground, media services reset).
+    public func reset() { lock.lock(); needsReset = true; lock.unlock() }
+
+    /// Tests only: break the session as iOS does when it suspends the app.
+    public func simulateInvalidation() { if let s = session { VTCompressionSessionInvalidate(s) } }
+
+    private static func makeSession(_ s: Settings) throws -> VTCompressionSession {
         var sess: VTCompressionSession?
         let st = VTCompressionSessionCreate(allocator: nil, width: Int32(s.width), height: Int32(s.height), codecType: kCMVideoCodecType_H264,
                                             encoderSpecification: nil, imageBufferAttributes: nil, compressedDataAllocator: nil,
                                             outputCallback: nil, refcon: nil, compressionSessionOut: &sess)
         guard st == noErr, let sess else { throw NSError(domain: "VideoEncoder", code: Int(st), userInfo: [NSLocalizedDescriptionKey: "VTCompressionSessionCreate \(st)"]) }
-        session = sess
         func set(_ k: CFString, _ v: CFTypeRef) { VTSessionSetProperty(sess, key: k, value: v) }
         set(kVTCompressionPropertyKey_RealTime, kCFBooleanTrue)
         set(kVTCompressionPropertyKey_ProfileLevel, kVTProfileLevel_H264_High_AutoLevel)
@@ -48,8 +67,16 @@ public final class VideoEncoder: @unchecked Sendable {     // VideoToolbox calls
         set(kVTCompressionPropertyKey_ColorPrimaries, kCVImageBufferColorPrimaries_ITU_R_709_2)
         set(kVTCompressionPropertyKey_TransferFunction, kCVImageBufferTransferFunction_ITU_R_709_2)
         set(kVTCompressionPropertyKey_YCbCrMatrix, kCVImageBufferYCbCrMatrix_ITU_R_709_2)
-        applyBitrate(s.bitrate)
-        VTCompressionSessionPrepareToEncodeFrames(sess)
+        return sess
+    }
+
+    private func recreate(_ why: String) {
+        if let old = session { VTCompressionSessionInvalidate(old) }
+        session = try? Self.makeSession(settings)
+        applyBitrate(settings.bitrate)
+        if let s = session { VTCompressionSessionPrepareToEncodeFrames(s) }
+        resets += 1; forceNextKey = true; submittedSinceOutput = 0; lastOutputTime = ProcessInfo.processInfo.systemUptime
+        onEvent?("encoder recreated (\(why)); resets \(resets)")
     }
 
     deinit { if let s = session { VTCompressionSessionInvalidate(s) } }
@@ -66,20 +93,41 @@ public final class VideoEncoder: @unchecked Sendable {     // VideoToolbox calls
 
     /// Encode one 1920×1080 frame (BGRA or NV12). Output arrives through `onFrame`, in order, on a VideoToolbox thread.
     public func encode(_ pb: CVPixelBuffer, pts: CMTime, forceKey: Bool = false) {
+        lock.lock()
+        let now = ProcessInfo.processInfo.systemUptime
+        var why: String? = needsReset ? "requested" : nil
+        if why == nil && submittedSinceOutput > 5 && now - lastOutputTime > watchdogS { why = "no output for \(String(format: "%.1f", now - lastOutputTime)) s" }
+        needsReset = false
+        lock.unlock()
+        if let why { recreate(why) }
         guard let s = session else { return }
-        let props: CFDictionary? = forceKey ? [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary : nil
-        VTCompressionSessionEncodeFrame(s, imageBuffer: pb, presentationTimeStamp: pts, duration: CMTime(value: 1, timescale: CMTimeScale(settings.fps.rounded())),
-                                        frameProperties: props, infoFlagsOut: nil) { [weak self] status, flags, sb in
+        lock.lock(); submitted += 1; submittedSinceOutput += 1; let key = forceKey || forceNextKey; forceNextKey = false; lock.unlock()
+        let props: CFDictionary? = key ? [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary : nil
+        let handler: VTCompressionOutputHandler = { [weak self] status, flags, sb in
             guard let self else { return }
             guard status == noErr, let sb, !flags.contains(.frameDropped), let fmt = sb.formatDescription,
-                  let bb = sb.dataBuffer else { self.lock.lock(); self.dropped += 1; self.lock.unlock(); return }
+                  let bb = sb.dataBuffer else {
+                self.lock.lock(); self.dropped += 1
+                if status != noErr { self.lastErrorStatus = status; self.needsReset = true }      // invalid session etc.: recreate
+                self.lock.unlock(); return
+            }
             var len = 0; var ptr: UnsafeMutablePointer<Int8>?
             guard CMBlockBufferGetDataPointer(bb, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &len, dataPointerOut: &ptr) == noErr, let ptr else { return }
             let attach = CMSampleBufferGetSampleAttachmentsArray(sb, createIfNecessary: false) as? [[CFString: Any]]
             let notSync = attach?.first?[kCMSampleAttachmentKey_NotSync] as? Bool ?? false
             let f = Frame(data: Data(bytes: ptr, count: len), pts: sb.presentationTimeStamp, isKey: !notSync, format: fmt)
-            self.lock.lock(); self.encoded += 1; self.lock.unlock()
+            self.lock.lock(); self.encoded += 1; self.submittedSinceOutput = 0; self.lastOutputTime = ProcessInfo.processInfo.systemUptime; self.lock.unlock()
             self.onFrame?(f)
+        }
+        var st = VTCompressionSessionEncodeFrame(s, imageBuffer: pb, presentationTimeStamp: pts, duration: CMTime(value: 1, timescale: CMTimeScale(settings.fps.rounded())),
+                                                 frameProperties: props, infoFlagsOut: nil, outputHandler: handler)
+        if st != noErr, let _ = session {                        // a broken session refuses at once: recreate, same frame again
+            lastErrorStatus = st; recreate("encode returned \(st)")
+            if let s2 = session {
+                st = VTCompressionSessionEncodeFrame(s2, imageBuffer: pb, presentationTimeStamp: pts, duration: CMTime(value: 1, timescale: CMTimeScale(settings.fps.rounded())),
+                                                     frameProperties: [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary, infoFlagsOut: nil, outputHandler: handler)
+                forceNextKey = false
+            }
         }
     }
 

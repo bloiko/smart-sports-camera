@@ -160,7 +160,7 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
     let PX = path["X"] as! [Double], PY = path["Y"] as! [Double], PW = path["CW"] as! [Double], PH = path["CH"] as! [Double]
     let f0 = Int((arg("--from").map { Double($0)! } ?? 0) * fps), n = Int((arg("--seconds").map { Double($0)! } ?? 60) * fps)
     var es = VideoEncoder.Settings(); es.fps = fps
-    let enc = try! VideoEncoder(es)
+    let enc = try! VideoEncoder(es); enc.onEvent = { log("encoder: " + $0) }
     var cfg = FolloStreamer.Config(); if let c = arg("--capacity") { cfg.capacityS = Double(c)! }; if let c = arg("--catchup") { cfg.catchUp = Double(c)! }
     let st = FolloStreamer(url: arg("--rtmp")!, key: arg("--key") ?? "test", config: cfg)
     st.trustAnyCertificateForTests = args.contains("--insecure-tls"); st.requestAcksForTests = !args.contains("--no-ack-request"); st.log = { log("streamer: " + $0) }
@@ -216,6 +216,7 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
             let due = t0.addingTimeInterval(Double(i) / fps).timeIntervalSinceNow; if due > 0 { usleep(useconds_t(due * 1_000_000)) }
             enc.encode(o!, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())))
             if let e = ae { while nextChunk < pcmChunks.count && pcmChunks[nextChunk].0 < Double(i + 1) / fps { e.append(pcmChunks[nextChunk].1); nextChunk += 1 } }
+            if let j = arg("--kill-encoder-at").map({ Int(Double($0)! * fps) }), i == j { log("test: invalidating the encoder session"); enc.simulateInvalidation() }
             if let j = arg("--jump-at").map({ Int(Double($0)! * fps) }), i == j { log("jump to live (delay was \(String(format: "%.1f", st.delayS)) s)"); st.jumpToLive() }
             if i % Int(5 * fps) == 0 { log(String(format: "t=%3.0f s publishing %@ delay %.1f s reconnects %d ring %.1f MB (peak %.1f) resent %d dropped-from-ring %d", Double(i) / fps, st.isPublishing ? "yes" : "NO ", st.delayS, st.reconnects, Double(st.ringBytes) / 1e6, Double(st.ringPeakBytes) / 1e6, st.resentFrames, st.droppedFromRing)) }
             return true

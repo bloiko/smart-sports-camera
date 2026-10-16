@@ -116,7 +116,7 @@ struct SetupView: View {
         .onChange(of: score.state) { _, _ in if startedAt != nil { score.push(to: ls.runner) } }
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
         .onAppear {
-            DebugLog.reset()
+            DebugLog.reset(); UIDevice.current.isBatteryMonitoringEnabled = true
             // debug: --video NAME з Mac або останній вибір у перемикачі
             if let i = CommandLine.arguments.firstIndex(of: "--video"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.testVideo") }
             if CommandLine.arguments.contains("--camera") { UserDefaults.standard.removeObject(forKey: "debug.testVideo") }
@@ -132,6 +132,7 @@ struct SetupView: View {
         }
         .onChange(of: scenePhase) { _, ph in
             // у фоні iOS і так зупиняє камеру; відпускаємо її явно, щоб вона не лишалась зайнятою
+            DebugLog.log("scene \(ph == .active ? "active" : ph == .background ? "background" : "inactive")")
             if ph == .background { cam.pause() } else if ph == .active { cam.resume() }
         }
         .onDisappear { cam.pause() }
@@ -141,7 +142,8 @@ struct SetupView: View {
             // debug: --golive натискає GO LIVE сам, щойно перевірка позиції пройшла (тест з Mac без дотику)
             if startedAt == nil, !cam.isRecording, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); go() }
             if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
-                DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB")
+                DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB battery \(Int(UIDevice.current.batteryLevel * 100))% \(UIDevice.current.batteryState == .unplugged ? "unplugged" : "charging") delay \(Int(ls.streamer.delayS)) s")
+                if !ls.streamer.diag.isEmpty { DebugLog.log("  " + ls.streamer.diag) }
             }
             if startedAt != nil { score.push(to: ls.runner) }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }

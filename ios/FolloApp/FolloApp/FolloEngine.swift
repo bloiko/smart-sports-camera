@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import UIKit
 import FolloCore
 
 /// The own stream path (stage 1f, behind `Streamer.engine == .follo`): our H.264 + AAC encoders, our RTMP client with the
@@ -21,6 +22,11 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
     func start(url: String, key: String, bitrate: Int, fps: Double) throws {
         var vs = VideoEncoder.Settings(); vs.bitrate = bitrate; vs.fps = fps
         let v = try VideoEncoder(vs); video = v
+        v.onEvent = { DebugLog.log("engine follo: " + $0) }
+        // iOS invalidates hardware encoder sessions while the app is suspended: recreate on return (HaishinKit does the same)
+        fgObserver = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: nil) { [weak v] _ in
+            DebugLog.log("engine follo: app back in the foreground → new encoder session"); v?.reset()
+        }
         v.onFrame = { [weak self] f in self?.q.async { self?.videoOut(f) } }
         let s = FolloStreamer(url: url, key: key); s.log = { DebugLog.log("streamer: " + $0) }; streamer = s; s.start()
         do { try startMic() } catch { DebugLog.log("mic: \(error.localizedDescription) — stream without audio") }
@@ -28,10 +34,17 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
     }
 
     func push(_ pb: CVPixelBuffer, at t: CMTime) { video?.encode(pb, pts: t) }
+    /// One line for the live log every 10 s: encoder and streamer counters (a silent stop shows at once).
+    var diag: String {
+        guard let v = video else { return "" }
+        return "enc in \(v.submitted) out \(v.encoded) drop \(v.dropped) resets \(v.resets) err \(v.lastErrorStatus) | audio \(audioPackets) | \(streamer?.diag ?? "")"
+    }
+    private var fgObserver: NSObjectProtocol?
     func setBitrate(_ b: Int) { video?.setBitrate(b) }
     func catchUp() { streamer?.jumpToLive() }
 
     func stop() {
+        if let o = fgObserver { NotificationCenter.default.removeObserver(o) }
         mic.inputNode.removeTap(onBus: 0); mic.stop()
         video?.flush()
         q.async { [self] in

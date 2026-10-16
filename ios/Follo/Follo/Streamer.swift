@@ -131,6 +131,7 @@ final class Streamer: ObservableObject {
 
     /// Own engine: drop the backlog after a network drop ("Наздогнати ефір", half-time).
     func catchUp() { follo?.catchUp() }
+    var diag: String { follo?.diag ?? "" }
 
     private func startFollo(url: String, key: String) {
         let f = FolloEngine()

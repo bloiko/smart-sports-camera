@@ -27,6 +27,8 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
     public private(set) var reconnects = 0, droppedFromRing = 0, sentFrames = 0, resentFrames = 0, ackedDrops = 0
     public private(set) var ringBytes = 0, ringPeakBytes = 0
     public private(set) var isPublishing = false
+    /// Diagnostics for the app log: items in the ring, next item to send, total items pushed.
+    public var diag: String { queue.sync { "ring \(ring.count) next \(sendIndex - base) pushed \(base + ring.count) sent \(sentFrames) inflight \(client?.bytesInFlight ?? 0)" } }
     /// Seconds the stream runs behind live (0 when it keeps up).
     public private(set) var delayS = 0.0
 

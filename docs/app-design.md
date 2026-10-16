@@ -29,6 +29,7 @@ In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position 
 
 - The setup/live screen scrolls; GO LIVE / STOP stays pinned at the bottom (on the phone the preview, scoreboard and buttons did not fit together).
 - Previews keep 16:9 so the whole viewer frame is visible.
+- STOP is a hold-only control (1 s, turns red while held), not a button: with a Button + long press, lifting the finger after the stop fired GO LIVE and a new broadcast started at once (found on the phone 2026-10-16). GO LIVE also ignores taps for 3 s after STOP.
 - "Звук" button next to "Погляд глядача": mutes the stream (silence replaces the microphone; the audio track keeps running, YouTube expects it). Works on both engines. The 4K recording has no audio.
 - Touches for the 60 s dimming are counted by a window-level recognizer that never takes touches away from scrolling.
 

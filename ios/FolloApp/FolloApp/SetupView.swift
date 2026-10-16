@@ -31,6 +31,8 @@ struct SetupView: View {
     @State var thermal = ProcessInfo.processInfo.thermalState
     @State var lastTouch = Date()                                   // пункт 11
     @State var viewer = false
+    @State var stoppedAt: Date?                                      // GO LIVE не спрацьовує 3 с після СТОП
+    @State var holdingStop = false
     @State var muted = false                                         // кнопка «Звук»: тиша в ефірі замість мікрофона
     @State var lastDbg = ""
     // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
@@ -116,11 +118,19 @@ struct SetupView: View {
         }
         .padding(16)
         }
-            Button(cam.isRecording ? "■  СТОП (утримуй)" : "●  GO LIVE") { if !cam.isRecording { go() } }
-                .simultaneousGesture(LongPressGesture(minimumDuration: 1).onEnded { _ in if cam.isRecording { stop() } })
-                .disabled(!cam.isRecording && (ls.runner.env == nil || ls.runner.env?.positionProblem != nil))
-                .font(.system(size: 22, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity).padding(16)
-                .background(cam.isRecording ? Color.gray.opacity(0.4) : Color.red).foregroundStyle(.white)
+            // СТОП — окремий вигляд без дії на дотик: у Button з утриманням відпускання пальця після стопу натискало GO LIVE
+            Group {
+                if cam.isRecording {
+                    Text(holdingStop ? "■  Тримай…" : "■  СТОП (утримуй)").frame(maxWidth: .infinity).padding(16)
+                        .background(holdingStop ? Color.red.opacity(0.7) : Color.gray.opacity(0.4))
+                        .onLongPressGesture(minimumDuration: 1, perform: { holdingStop = false; stop() }, onPressingChanged: { holdingStop = $0 })
+                } else {
+                    Button("●  GO LIVE") { if stoppedAt.map({ Date().timeIntervalSince($0) > 3 }) ?? true { go() } }
+                        .disabled(ls.runner.env == nil || ls.runner.env?.positionProblem != nil)
+                        .frame(maxWidth: .infinity).padding(16).background(Color.red)
+                }
+            }
+                .font(.system(size: 22, weight: .heavy, design: .rounded)).foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal, 16).padding(.vertical, 8)
         }
@@ -216,6 +226,7 @@ struct SetupView: View {
 
     func stop() {
         let startedAtSaved = startedAt ?? Date()
+        stoppedAt = Date(); DebugLog.log("STOP")
         cam.stopRecording(); startedAt = nil; ls.streamer.stop(); ls.save(nil)
         let camOut = ls.runner.stop(); let env = ls.runner.env; let target = live
         result = true; clips = []; hlProgress = "Готую хайлайти…"

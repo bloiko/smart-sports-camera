@@ -85,6 +85,34 @@ Hold-out, per project rule: matches 1–3 (today's checklists) and the last 20% 
 | iPhone 15 players pass / ball ROI | to measure | ≤ 60 ms / ≤ 15 ms |
 | 30-min phone run | 25–30 fps, ~600 MB, thermal ok | Same |
 
+## How we move (owner's rules, 2026-10-16)
+
+- **One step at a time.** The next step starts only after the current one is understood in detail and tested.
+- **Always before/after.** Every step is compared with the old flow on identical inputs, with numbers and frames.
+- **Switchable.** The old flow stays in the app. Every new part sits behind a switch, so we can always go back:
+  - `Streamer` HaishinKit / Follo;
+  - detector set YOLO / FolloNet;
+  - sign-in via SDK / own.
+  The default stays "old" until the new part has passed on the phone.
+- **Mac first.** Everything is tested on the Mac (`follosim`, local servers, recorded matches); the phone checks come
+  later, in a batch, when the owner has the phone.
+
+## Stages in order of importance
+
+1. **Own streaming core** (replaces HaishinKit, gives the 60 s buffer). Steps, each tested on the Mac before the next:
+   - **1a.** H.264 encoder on VideoToolbox (`VideoEncoder`), compared with the same hardware encoder driven by ffmpeg:
+     validity, GOP, bitrate, PSNR, speed, frames.
+   - **1b.** Own FLV muxer, compared with ffmpeg's FLV of the same packets.
+   - **1c.** Own RTMP client into a local `ffmpeg -listen` server: the received stream must equal what was sent.
+   - **1d.** Encoded ring buffer and reconnect, through a local proxy that cuts the connection for 10/30/60 s: no frame lost.
+   - **1e.** AAC audio.
+   - **1f.** App integration behind the switch, default HaishinKit.
+2. **Detector bench and switch.** `Detector` takes any model with the same outputs; frozen benchmark; the YOLO/FolloNet switch.
+3. **FolloNet-B** (ball): smaller and the quicker win.
+4. **FolloNet-P** (players), with the homography labels from SoccerTrack.
+5. **Own OAuth.**
+6. **Removal** of HaishinKit and the YOLO models, only after the phone checks pass.
+
 ## Phases
 
 | # | Work (Claude) | Owner | Effort |

@@ -508,6 +508,33 @@ process ID (`phonedrops.sh`).
 - lip-sync with the real camera (a clap);
 - the owner's decision to make Follo the default.
 
+## Own stream: 90 minutes on the phone (2026-10-16)
+
+The first attempt found a real gap: after iOS briefly suspended the app, the hardware encoder session became invalid
+(−12903) and silently produced nothing, while the phone still showed "live". Fixed with self-healing in
+`VideoEncoder`: recreate on an error status (same frame, forced keyframe), on return to the foreground, and by a 2 s
+no-output watchdog. Checked on the Mac (invalidated mid-stream: 1000/1000 frames) and on the phone (sent to the
+background via Settings for 10 s: new session, reconnect in 2 s). The live log now prints encoder and streamer counters
+every 10 s.
+
+**Second attempt: 91 min**, test video in a loop, Follo, charging, 4K recording on.
+
+| | |
+| --- | --- |
+| Received | 129,816 frames over 5475 s; the only gaps are the test video looping (1.7 s every 240 s) and 236 s while the app was in the background |
+| Lost by the stream | 0; 99 duplicates after the reconnect |
+| Encoder | 129,645 in / 129,642 out, 2 recreations (background and return) |
+| Memory | 344–803 MB, flat |
+| Thermal | "serious" from 65 min, never "critical"; bitrate stepped to 3000 kbit/s; the stream went on |
+| 4K chunks | 28 completed; the one interrupted by the background opens with 170 of 180 s (10 s fragments) |
+| Storage | The test recording used 10.7 GB (deleted afterwards; 13.8 GB free) |
+
+**Open issues.**
+- The app went to the background at 33 min without any action from the Mac; the cause is unknown. The app should warn
+  loudly when it leaves the screen.
+- Heat after one hour while charging indoors.
+- A real match needs about 20 GB at the 30 Mbit/s 4K recording rate.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

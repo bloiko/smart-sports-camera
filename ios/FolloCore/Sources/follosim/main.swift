@@ -67,6 +67,7 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
     CVPixelBufferPoolCreate(nil, nil, [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: OW,
                                        kCVPixelBufferHeightKey as String: OH, kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &pool)
     var writer: AVAssetWriter?, input: AVAssetWriterInput?
+    let flvPath = args.firstIndex(of: "--flv").map { args[$0 + 1] }; var flv: FLVWriter?      // stage 1b: our FLV of the same packets
     var sizes: [Int] = [], keys: [Int] = [], submitted: [Double] = [], latency: [Double] = []
     let out = URL(fileURLWithPath: args[4]); try? FileManager.default.removeItem(at: out)
     let q = DispatchQueue(label: "enc.out")
@@ -76,7 +77,14 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
             let i = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: fr.format); i.expectsMediaDataInRealTime = false
             w.add(i); w.startWriting(); w.startSession(atSourceTime: fr.pts); writer = w; input = i
             log("parameter sets: \(fr.parameterSets.map { $0.count }) bytes")
+            if let fp = flvPath, let avcC = FLV.avcC(of: fr.format) {
+                flv = try! FLVWriter(path: fp, audio: false)
+                flv!.write(.script, ms: 0, body: FLV.metadata(width: OW, height: OH, fps: fps, videoKbps: Double(es.bitrate) / 1000, audio: false))
+                flv!.write(.video, ms: 0, body: FLV.videoSequenceHeader(avcC: avcC))
+                log("avcC \(avcC.count) bytes: \(avcC.prefix(8).map { String(format: "%02x", $0) }.joined())")
+            }
         }
+        flv?.write(.video, ms: UInt32((CMTimeGetSeconds(fr.pts) * 1000).rounded()), body: FLV.videoPacket(fr.data, isKey: fr.isKey))
         while !input!.isReadyForMoreMediaData { usleep(1000) }
         input!.append(fr.sampleBuffer()!)
         let k = sizes.count
@@ -109,6 +117,7 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
     }
     if raw { log("raw: \(n) frames"); break }
     enc.flush(); q.sync {}
+    if let f = flv { f.write(.video, ms: UInt32(((Double(sizes.count - 1) / fps) * 1000).rounded()), body: FLV.videoEndOfSequence()); f.close() }
     let done = DispatchSemaphore(value: 0); input?.markAsFinished(); writer?.finishWriting { done.signal() }; done.wait()
     let secs = Double(sizes.count) / fps, kbps = Double(sizes.reduce(0, +)) * 8 / secs / 1000
     var perSecond: [Double] = []; var j = 0

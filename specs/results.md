@@ -331,6 +331,23 @@ the same frames (`--raw-stdout`). PSNR is measured against the uncompressed crop
 | Speed (M1) | ~150 fps, 6× real time; encoder latency 62–70 ms when frames arrive faster than real time |
 | Frames | Ours at 4.5 Mbit/s and the reference look the same; 2 Mbit/s softens the grass texture |
 
+## Own stack, stage 1b: own FLV packaging (2026-10-16, Mac)
+
+`FolloCore/FLV.swift`: FLV tag bodies (AVC sequence header from VideoToolbox's own avcC, AVC NALU packets, end of
+sequence; AAC bodies for stage 1e), AMF0 encoding, onMetaData, and `FLVWriter`. The tag bodies are exactly the RTMP
+message payloads, so stage 1c reuses them. Test: `follosim encode … --flv OUT.flv` writes our FLV next to the MP4 of the
+same encoded frames. The reference is ffmpeg's FLV of that MP4 (`ffmpeg -i x.mp4 -c copy ref.flv`). `flvcmp` parses
+both files tag by tag and checks PreviousTagSize and that no bytes trail.
+
+| Run | Result |
+| --- | --- |
+| Match 2, 10 s | Packet tables (pts, dts, size, flags) identical; H.264 elementary streams identical (5,594,011 bytes); 252/252 video tags identical (body and timestamp) |
+| Match 3, 60 s | 1502/1502 video tags identical |
+| Match 2, 12 s with bitrate steps and a forced keyframe | 302/302 identical |
+| Decoding | ffmpeg decodes our FLV without errors; onMetaData (AMF0) is parsed (`encoder=Follo`) without warnings |
+
+Difference found and fixed: ffmpeg ends the stream with an AVC end-of-sequence tag; ours now does too.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

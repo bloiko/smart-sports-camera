@@ -52,6 +52,16 @@ enum MatchStore {
         var all = load(); if let i = all.firstIndex(where: { $0.id == m.id }) { all[i].chunkFiles = [] }; save(all)
     }
 
+    /// Видалити матч цілком: папку (запис 4K і кліпи) і рядок у списку. Старі матчі без папки — лише їхні файли.
+    static func delete(_ m: MatchRecord) {
+        if let f = m.folder { try? FileManager.default.removeItem(at: folderURL(f)) }
+        else {
+            for u in chunks(m) { try? FileManager.default.removeItem(at: u) }
+            for c in m.clipFiles { try? FileManager.default.removeItem(at: highlightsDir(m).appendingPathComponent(c)) }
+        }
+        save(load().filter { $0.id != m.id })
+    }
+
     static func freeGB() -> Double {
         Double((try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())[.systemFreeSize] as? Int64) ?? 0) / 1e9
     }

@@ -11,6 +11,7 @@ struct ResultView: View {
     @StateObject var saver = PhotoSaver()
     @State var vertical = false
     @State var playing: URL?
+    @Environment(\.dismiss) var dismiss
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Матч записано").font(.system(size: 26, weight: .heavy, design: .rounded))
@@ -37,7 +38,11 @@ struct ResultView: View {
                 }.listStyle(.plain)
             } else if progress == nil { Text("Небезпечних моментів не знайдено").font(.footnote).foregroundStyle(.secondary) }
             Spacer()
+            // свайп униз не очевидний (і на симуляторі не спрацював): явна кнопка
+            Button { dismiss() } label: { Text("Готово").font(.system(size: 20, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity).padding(14) }
+                .background(Color.white.opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("resultDone")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .sheet(item: $playing) { url in VideoPlayer(player: AVPlayer(url: url)).ignoresSafeArea() }
     }

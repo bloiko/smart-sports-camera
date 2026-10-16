@@ -4,6 +4,8 @@ import SwiftUI
 struct MyMatchesView: View {
     @State var matches = MatchStore.load()
     @State var newMatch = false
+    @State var toDelete: MatchRecord?
+    static var autostarted = false
     var body: some View {
         NavigationStack {
             List {
@@ -29,15 +31,22 @@ struct MyMatchesView: View {
                             if m.recording == true { Label("запис перервано", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.yellow) }
                         }
                         }
+                        .accessibilityIdentifier("match")
                         .swipeActions {
-                            if !MatchStore.chunks(m).isEmpty { Button("Видалити 4K", role: .destructive) { MatchStore.deleteRecording(m); matches = MatchStore.load() } }
+                            Button("Видалити") { toDelete = m }.tint(.red)
+                            if !MatchStore.chunks(m).isEmpty { Button("Лише 4K") { MatchStore.deleteRecording(m); matches = MatchStore.load() }.tint(.orange) }
                         }
                     }
                 }
             }
             .navigationTitle("Follo")
+            .confirmationDialog("Видалити матч \(toDelete?.date.formatted(date: .abbreviated, time: .shortened) ?? "")? Запис 4K і кліпи зникнуть з телефона (у «Фото» і на YouTube лишаться).",
+                                isPresented: Binding(get: { toDelete != nil }, set: { if !$0 { toDelete = nil } }), titleVisibility: .visible) {
+                Button("Видалити матч", role: .destructive) { if let m = toDelete { MatchStore.delete(m); matches = MatchStore.load() }; toDelete = nil }
+            }
             .fullScreenCover(isPresented: $newMatch, onDismiss: { matches = MatchStore.load() }) { SetupView() }
-            .onAppear { if CommandLine.arguments.contains("--autostart") { newMatch = true } }   // тест з Mac: одразу екран камери
+            // тест з Mac: одразу екран камери, але лише раз на запуск (після «назад» список лишається відкритим)
+            .onAppear { if CommandLine.arguments.contains("--autostart"), !Self.autostarted { Self.autostarted = true; newMatch = true } }
         }
     }
     func fmt(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }

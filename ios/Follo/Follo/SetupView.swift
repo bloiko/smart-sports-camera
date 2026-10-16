@@ -50,8 +50,8 @@ struct SetupView: View {
         ScrollView {
         VStack(spacing: 12) {
             HStack {
-                if !cam.isRecording { Button { dismiss() } label: { Image(systemName: "chevron.left") } }
-                Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)); Spacer()
+                if !cam.isRecording { Button { dismiss() } label: { Image(systemName: "chevron.left") }.accessibilityIdentifier("back") }
+                Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)).accessibilityIdentifier("title"); Spacer()
             }
             if viewer && cam.isRecording {
                 ViewerView(runner: ls.runner).frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
@@ -64,7 +64,7 @@ struct SetupView: View {
                     Toggle("Погляд глядача", isOn: $viewer).font(.footnote)
                     Button { muted.toggle(); ls.streamer.setMuted(muted) } label: {
                         Label(muted ? "Звук вимкнено" : "Звук", systemImage: muted ? "mic.slash.fill" : "mic.fill")
-                    }.font(.footnote.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 8)
+                    }.accessibilityIdentifier("mute").font(.footnote.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 8)
                         .background(muted ? Color.red.opacity(0.4) : Color.white.opacity(0.08)).clipShape(Capsule())
                 }
             }
@@ -85,7 +85,7 @@ struct SetupView: View {
                     Button("Копіювати") { UIPasteboard.general.string = l.watchURL } }
                     .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            Text(error ?? cam.cameraError ?? status).font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
+            Text(error ?? cam.cameraError ?? status).accessibilityIdentifier("status").font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
             if !cam.isRecording, !CameraSession.testVideos.isEmpty {      // лише debug: тестове відео замість камери
                 Picker("Джерело", selection: Binding(get: { cam.testVideo }, set: { cam.setSource($0); ls.runner.resetPosition() })) {
                     Text("Камера").tag(URL?.none)
@@ -113,7 +113,7 @@ struct SetupView: View {
             if let w = ls.warning { Text(w).font(.footnote).foregroundStyle(.yellow) }
             if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
                 Button("Відновити ефір \(s.watchURL.suffix(11))…") { live = LiveTarget(broadcastId: s.broadcastId, rtmpsURL: s.rtmpsURL, streamKey: s.streamKey, watchURL: s.watchURL); go(resume: true) }
-                    .font(.footnote)
+                    .font(.footnote).disabled(!positionOK)
             }
         }
         .padding(16)
@@ -124,10 +124,12 @@ struct SetupView: View {
                     Text(holdingStop ? "■  Тримай…" : "■  СТОП (утримуй)").frame(maxWidth: .infinity).padding(16)
                         .background(holdingStop ? Color.red.opacity(0.7) : Color.gray.opacity(0.4))
                         .onLongPressGesture(minimumDuration: 1, perform: { holdingStop = false; stop() }, onPressingChanged: { holdingStop = $0 })
+                        .accessibilityIdentifier("stop").accessibilityAddTraits(.isButton)
                 } else {
-                    Button("●  GO LIVE") { if stoppedAt.map({ Date().timeIntervalSince($0) > 3 }) ?? true { go() } }
-                        .disabled(ls.runner.env == nil || ls.runner.env?.positionProblem != nil)
-                        .frame(maxWidth: .infinity).padding(16).background(Color.red)
+                    // сіра, поки позиція не перевірена (вимкнена кнопка з червоним тлом виглядала активною)
+                    Button(positionOK ? "●  GO LIVE" : "Перевіряю поле…") { if stoppedAt.map({ Date().timeIntervalSince($0) > 3 }) ?? true { go() } }
+                        .disabled(!positionOK).accessibilityIdentifier("goLive")
+                        .frame(maxWidth: .infinity).padding(16).background(positionOK ? Color.red : Color.gray.opacity(0.35))
                 }
             }
                 .font(.system(size: 22, weight: .heavy, design: .rounded)).foregroundStyle(.white)
@@ -166,7 +168,7 @@ struct SetupView: View {
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(ticker) { _ in
             // debug: --golive натискає GO LIVE сам, щойно перевірка позиції пройшла (тест з Mac без дотику)
-            if startedAt == nil, !cam.isRecording, !autoWentLive, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); autoWentLive = true; go() }
+            if startedAt == nil, !cam.isRecording, !autoWentLive, CommandLine.arguments.contains("--golive"), positionOK, error == nil { DebugLog.log("auto GO LIVE"); autoWentLive = true; go() }
             if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
                 DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB battery \(Int(UIDevice.current.batteryLevel * 100))% \(UIDevice.current.batteryState == .unplugged ? "unplugged" : "charging") delay \(Int(ls.streamer.delayS)) s")
                 if !ls.streamer.diag.isEmpty { DebugLog.log("  " + ls.streamer.diag) }
@@ -181,7 +183,15 @@ struct SetupView: View {
         }
     }
 
+    /// Правило власника: ефір ніколи не стартує, поки не знайдене поле і обидва дальні кути з воротами не в кадрі
+    /// (перевірка позиції). Стоїть у самому go(), тож її не обходить ні GO LIVE, ні «Відновити ефір», ні --golive.
+    var positionOK: Bool { ls.runner.env != nil && ls.runner.env?.positionProblem == nil }
+    /// Тест: тестове відео замість камери або запуск з Mac. Правило власника: у тестах звук ефіру завжди вимкнений.
+    var isTest: Bool { cam.testVideo != nil || CommandLine.arguments.contains("--autostart") }
+
     func go(resume: Bool = false) {
+        guard positionOK else { DebugLog.log("GO LIVE refused: position not checked (\(ls.runner.env?.positionProblem ?? "no pitch yet"))"); return }
+        if isTest && !muted { muted = true; ls.streamer.setMuted(true) }
         error = nil; status = "Створюю трансляцію…"
         let problems = ls.preflight()
         if !problems.isEmpty && !resume { status = problems.joined(separator: " · ") }

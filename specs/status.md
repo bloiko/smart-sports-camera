@@ -168,6 +168,17 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 
 **Done 2026-10-12 (screens 1–4):** onboarding with 3 cards and the permission requests, "My matches" with the match list (date, link, clips, goals, 4K kept or deleted), routing in `FolloApp.swift`; the result screen writes the match record. Google Sign-In is a placeholder until the SDK is added.
 
+**Done 2026-10-16:**
+- First private YouTube broadcast from the phone on the own stream engine (Studio key).
+- Live screen:
+  - scrolls, with STOP pinned at the bottom;
+  - a mute button;
+  - STOP is a hold-only control (the old button restarted the broadcast).
+- Owner's rules: GO LIVE is refused inside `go()` until the position check passes, and test runs start muted.
+- Matches can be deleted whole.
+- UI tests on the simulator (`ios/ui_test.sh`, stage 0 of `docs/youtube-signin-and-ui-test-plan.md`).
+- Next: stage 1 of that plan, own Google sign-in with unlisted broadcasts and a stable link.
+
 **To do:** live run with YouTube on the phone; a long test-video run (thermal, battery over 90 min); compare the phone camera path with `live_sim.py` on the same file; then the streamer buffer of encoded frames, Google Sign-In, settings screen (10), edge-case items 15–21. Blocked on the owner: Xcode, first run, own footage, Google Cloud project.
 
 **Difficulties**

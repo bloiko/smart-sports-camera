@@ -117,11 +117,21 @@ final class CameraSession: NSObject, ObservableObject {
             dev.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
             dev.activeVideoMaxFrameDuration = slow
             if dev.isExposureModeSupported(.continuousAutoExposure) { dev.exposureMode = .continuousAutoExposure }
+            // debug experiment: without the geometric distortion correction the ultra-wide keeps its edges (curved lines)
+            if CommandLine.arguments.contains("--no-distortion-correction"), dev.isGeometricDistortionCorrectionSupported { dev.isGeometricDistortionCorrectionEnabled = false }
             dev.unlockForConfiguration()
             DebugLog.log("exposure headroom: fps 30…\(slow.timescale), maxISO \(Int(dev.activeFormat.maxISO))")
         } catch { DebugLog.log("exposure headroom failed: \(error)") }
         session.commitConfiguration()
         device = dev
+        // debug: field of view of every format of this camera, and the geometric distortion correction (it crops the edges)
+        let fovs = dev.formats.map { f -> String in
+            let d = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+            let fps = f.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
+            return "\(d.width)x\(d.height)@\(Int(fps)) \(String(format: "%.1f", f.videoFieldOfView))°"
+        }
+        DebugLog.log("camera \(dev.localizedName): active FOV \(String(format: "%.1f", dev.activeFormat.videoFieldOfView))°, distortion correction supported \(dev.isGeometricDistortionCorrectionSupported) enabled \(dev.isGeometricDistortionCorrectionEnabled)")
+        DebugLog.log("formats: " + Array(Set(fovs)).sorted().joined(separator: ", "))
         observe(dev)
         session.startRunning()
         let d = CMVideoFormatDescriptionGetDimensions(dev.activeFormat.formatDescription)
@@ -164,9 +174,10 @@ final class CameraSession: NSObject, ObservableObject {
 
     @Published var formatInfo = ""
 
-    func startRecording() {
+    /// Запис у папку матчу (`dir` = <match>/chunks). Після відновлення ефіру нумерація продовжується в тій самій папці.
+    func startRecording(dir: URL) {
         queue.async {
-            self.writer = ChunkWriter(chunkSeconds: self.chunkSeconds) { n in DispatchQueue.main.async { self.chunkCount = n } }
+            self.writer = ChunkWriter(dir: dir, chunkSeconds: self.chunkSeconds) { n in DispatchQueue.main.async { self.chunkCount = n } }
             DispatchQueue.main.async { self.isRecording = true }
         }
     }
@@ -218,7 +229,7 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 }
 
-/// Пише кадри в MP4 (HEVC, апаратно) файлами по chunkSeconds у Documents/chunks/.
+/// Пише кадри в MP4 (HEVC, апаратно) файлами по chunkSeconds у папку матчу; існуючі файли ніколи не перезаписуються.
 final class ChunkWriter {
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
@@ -227,17 +238,20 @@ final class ChunkWriter {
     private let chunkSeconds: Double
     private let onChunk: (Int) -> Void
 
-    init(chunkSeconds: Double, onChunk: @escaping (Int) -> Void) {
-        self.chunkSeconds = chunkSeconds; self.onChunk = onChunk
-        try? FileManager.default.createDirectory(at: Self.dir, withIntermediateDirectories: true)
+    let dir: URL
+    init(dir: URL, chunkSeconds: Double, onChunk: @escaping (Int) -> Void) {
+        self.dir = dir; self.chunkSeconds = chunkSeconds; self.onChunk = onChunk
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // продовжити після вже записаних файлів (відновлення ефіру), а не почати з 001
+        let existing = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).compactMap { n -> Int? in
+            guard n.hasPrefix("chunk_"), n.hasSuffix(".mp4") else { return nil }; return Int(n.dropFirst(6).dropLast(4)) }
+        index = existing.max() ?? 0
     }
-
-    static var dir: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("chunks") }
 
     private func open(at time: CMTime, w: Int, h: Int) {
         index += 1
-        let url = Self.dir.appendingPathComponent(String(format: "chunk_%03d.mp4", index))
-        try? FileManager.default.removeItem(at: url)
+        var url = dir.appendingPathComponent(String(format: "chunk_%03d.mp4", index))
+        while FileManager.default.fileExists(atPath: url.path) { index += 1; url = dir.appendingPathComponent(String(format: "chunk_%03d.mp4", index)) }
         let bitRate: Int = 30_000_000 * (w * h) / (3840 * 2160)
         guard let wr = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
         let i = AVAssetWriterInput(mediaType: .video, outputSettings: [

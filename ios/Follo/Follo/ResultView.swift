@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AVKit
 
 /// Екран 8 «результат»: посилання на архів YouTube, кліпи хайлайтів (16:9 / 9:16), поділитись.
@@ -6,6 +7,8 @@ struct ResultView: View {
     let watchURL: String?
     let clips: [HighlightsRunner.Clip]
     let progress: String?
+    var match: MatchRecord? = nil
+    @StateObject var saver = PhotoSaver()
     @State var vertical = false
     @State var playing: URL?
     var body: some View {
@@ -16,6 +19,10 @@ struct ResultView: View {
                     .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
             if let p = progress { HStack { ProgressView(); Text(p).font(.footnote).foregroundStyle(.secondary) } }
+            if let m = match, progress == nil {
+                Button { Task { await saver.save(m) } } label: { Label("Зберегти весь запис у Фото", systemImage: "square.and.arrow.down") }.disabled(saver.busy)
+                if let s = saver.state { Text(s).font(.footnote).foregroundStyle(.secondary) }
+            }
             if !clips.isEmpty {
                 Picker("", selection: $vertical) { Text("16:9").tag(false); Text("9:16 Reels").tag(true) }.pickerStyle(.segmented)
                 List(clips.indices, id: \.self) { i in

@@ -22,6 +22,8 @@ struct SetupView: View {
     @StateObject var ls = LiveSession()
     @StateObject var score = ScoreModel()                            // рахунок на трансляції
     @State var showTeams = false
+    @State var autoWentLive = false                                  // debug --golive: only once per launch
+    @State var match: MatchRecord?                                   // поточний матч: своя папка, запис у списку з першої секунди
     @State var live: LiveTarget?
     @State var status = "Все поле в кадрі? Ворота з обох боків?"
     @State var error: String?
@@ -114,7 +116,7 @@ struct SetupView: View {
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
         .sheet(isPresented: $showTeams) { TeamsSheet(score: score) { showTeams = false } }
         .onChange(of: score.state) { _, _ in if startedAt != nil { score.push(to: ls.runner) } }
-        .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress) }
+        .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress, match: match) }
         .onAppear {
             DebugLog.reset(); UIDevice.current.isBatteryMonitoringEnabled = true
             // debug: --video NAME з Mac або останній вибір у перемикачі
@@ -140,12 +142,15 @@ struct SetupView: View {
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(ticker) { _ in
             // debug: --golive натискає GO LIVE сам, щойно перевірка позиції пройшла (тест з Mac без дотику)
-            if startedAt == nil, !cam.isRecording, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); go() }
+            if startedAt == nil, !cam.isRecording, !autoWentLive, CommandLine.arguments.contains("--golive"), ls.runner.env != nil, ls.runner.env?.positionProblem == nil, error == nil { DebugLog.log("auto GO LIVE"); autoWentLive = true; go() }
             if let s = startedAt, Int(Date().timeIntervalSince(s)) % 10 == 0 {
                 DebugLog.log("live \(Int(Date().timeIntervalSince(s))) s: frames in \(ls.runner.inFrames) out \(ls.runner.outFrames) ball \(Int(ls.runner.ballShare * 100))% goals \(ls.runner.goalsKnown) chunks \(cam.chunkCount) stream \(ls.streamer.state) \(ls.streamer.bitrateKbps) kbps thermal \(thermalText) mem \(DebugLog.memMB()) MB battery \(Int(UIDevice.current.batteryLevel * 100))% \(UIDevice.current.batteryState == .unplugged ? "unplugged" : "charging") delay \(Int(ls.streamer.delayS)) s")
                 if !ls.streamer.diag.isEmpty { DebugLog.log("  " + ls.streamer.diag) }
             }
             if startedAt != nil { score.push(to: ls.runner) }
+            // debug: --stop-after N натискає «Стоп» через N секунд ефіру (перевірка запису з Mac)
+            if let s = startedAt, let i = CommandLine.arguments.firstIndex(of: "--stop-after"), i + 1 < CommandLine.arguments.count,
+               let n = Double(CommandLine.arguments[i + 1]), Date().timeIntervalSince(s) >= n { DebugLog.log("auto STOP after \(Int(n)) s"); stop() }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
                 status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem ?? "Поле в кадрі. Можна в ефір") }
@@ -177,7 +182,13 @@ struct SetupView: View {
                     if p.count == 3 { score.half = p[0]; score.setClock(Double(p[1] * 60 + p[2])) }
                 }
                 score.push(to: ls.runner)
-                cam.startRecording(); startedAt = resume ? ls.saved?.startedAt ?? Date() : Date()
+                let start = resume ? ls.saved?.startedAt ?? Date() : Date()
+                let folder = MatchStore.folderName(for: start)
+                var m = MatchStore.load().first(where: { $0.folder == folder })
+                    ?? MatchRecord(date: start, watchURL: live?.watchURL, durationS: 0, chunkFiles: [], clipFiles: [], goals: 0, knownPitch: false, folder: folder)
+                m.recording = true; MatchStore.upsert(m); match = m
+                cam.startRecording(dir: MatchStore.chunksDir(m)); startedAt = start
+                DebugLog.log("recording into matches/\(folder)")
                 if let l = live {
                     ls.save(.init(broadcastId: l.broadcastId, rtmpsURL: l.rtmpsURL, streamKey: l.streamKey, watchURL: l.watchURL, startedAt: startedAt!))
                     await ls.streamer.start(url: l.rtmpsURL, key: l.streamKey)
@@ -196,18 +207,22 @@ struct SetupView: View {
         result = true; clips = []; hlProgress = "Готую хайлайти…"
         // хайлайти з записаних файлів у фоні (≈ 1–2 хв): кікоф → гол, кліпи 16:9 і 9:16
         DispatchQueue.global(qos: .userInitiated).async {
-            let chunks = ((try? FileManager.default.contentsOfDirectory(at: ChunkWriter.dir, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "mp4" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            let rec = match ?? MatchRecord(date: startedAtSaved, durationS: 0, chunkFiles: [], clipFiles: [], goals: 0, knownPitch: false, folder: MatchStore.folderName(for: startedAtSaved))
+            Thread.sleep(forTimeInterval: 1)                          // останній файл дописується після stopRecording
+            let chunks = MatchStore.chunks(rec)
             var out: [HighlightsRunner.Clip] = []
-            if let (c, j) = camOut, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
+            if let (c, j) = camOut, let e = env { out = (try? HighlightsRunner.make(chunks: chunks, cam: c, jerseys: j, env: e, outDir: MatchStore.highlightsDir(rec), progress: { p in DispatchQueue.main.async { hlProgress = p } })) ?? [] }
             DispatchQueue.main.async {
                 clips = out; hlProgress = nil
-                MatchStore.add(MatchRecord(date: startedAtSaved, watchURL: target?.watchURL, durationS: Date().timeIntervalSince(startedAtSaved),
-                                           chunkFiles: chunks.map { $0.lastPathComponent }, clipFiles: out.map { $0.file.lastPathComponent },
-                                           goals: out.filter { $0.kind == "goal" }.count, knownPitch: ls.runner.knownPitch))
+                var m = rec
+                m.watchURL = target?.watchURL ?? m.watchURL; m.durationS = Date().timeIntervalSince(startedAtSaved)
+                m.chunkFiles = chunks.map { $0.lastPathComponent }; m.clipFiles = out.map { $0.file.lastPathComponent }
+                m.goals = out.filter { $0.kind == "goal" }.count; m.knownPitch = ls.runner.knownPitch; m.recording = false
+                MatchStore.upsert(m); match = m
             }
         }
         if let l = target, !l.broadcastId.isEmpty { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
-        status = "Записано \(cam.chunkCount) файлів у Documents/chunks"
+        status = "Записано \(cam.chunkCount) файлів 4K — у «Моїх матчах»: переглянути і зберегти у Фото"
     }
 
     var thermalText: String { ["ok", "ok", "гаряче", "критично"][min(thermal.rawValue, 3)] }

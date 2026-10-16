@@ -272,6 +272,14 @@ case "interleave":   // follosim interleave — stage 1f: audio arriving 2 s bef
     let audioOut = out.filter { $0.1 }.count, videoOut = out.filter { !$0.1 }.count
     let maxLead = out.filter { $0.1 }.map { a in a.0 }.max() ?? 0
     print("interleaver: video \(videoOut)/\(Int(seconds * fps)), audio out \(audioOut) of \(audioIn) in (rest wait for later video: \(audioIn - audioOut - il.droppedAudio)), dropped \(il.droppedAudio); time-ordered \(ordered); last audio \(maxLead) ms ≤ last video \(out.last { !$0.1 }!.0) ms")
+case "join":   // follosim join OUT.mp4 CHUNK1 CHUNK2 … — "Зберегти у Фото": the chunks of a match as one file, no re-encoding
+    let urls = args.dropFirst(3).map { URL(fileURLWithPath: $0) }
+    let out = URL(fileURLWithPath: args[2]); let t0 = Date()
+    let sem = DispatchSemaphore(value: 0); var err: Error?
+    Task { do { try await MatchVideo.join(Array(urls), to: out) } catch { err = error }; sem.signal() }
+    sem.wait()
+    if let err { print("join failed: \(err)"); exit(1) }
+    print("joined \(urls.count) chunks (\(MatchVideo.bytes(Array(urls)) / 1_000_000) MB) → \(MatchVideo.bytes([out]) / 1_000_000) MB in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
 case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [

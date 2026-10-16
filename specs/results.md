@@ -535,6 +535,25 @@ every 10 s.
 - Heat after one hour while charging indoors.
 - A real match needs about 20 GB at the 30 Mbit/s 4K recording rate.
 
+## Field of view and per-match storage (2026-10-16)
+
+**Field of view.** Formats of the iPhone 15 ultra-wide, measured on the phone:
+- every 16:9 format is 107.8° horizontal, and Follo already records 3840×2160 at 107.8°;
+- the 4:3 formats are 105.2° horizontal, but cover about 89° vertical against about 75°;
+- turning off geometric distortion correction changed the view by about 1% in a side-by-side test. Not worth the curved lines.
+
+The owner's native Camera clip was 1080p60 with stabilisation, which crops the edges, so it looks narrower than the same
+spot in Follo. The view that looked much wider in the app was the test video (a stitched panorama of match 2): the
+test-video source had been left on after the test runs.
+
+**Per-match folders**, checked on the phone with `--stop-after`:
+- every recording went into its own folder, and no `chunk_001` was overwritten;
+- recordings killed mid-way stay listed as "recording" and their chunk opens up to the last fragment (20 s);
+- highlights are saved per match.
+
+`follosim join`: 3 real phone chunks (180 s + 170 s interrupted + 60 s) became one 410 s file in 1.3 s without
+re-encoding; the joins decode cleanly. Saving to Photos still needs a tap by the owner, for the permission.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

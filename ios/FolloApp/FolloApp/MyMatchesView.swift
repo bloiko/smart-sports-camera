@@ -15,6 +15,7 @@ struct MyMatchesView: View {
                 }
                 Section(matches.isEmpty ? "Ще немає матчів" : "Матчі") {
                     ForEach(matches) { m in
+                        NavigationLink { MatchDetailView(match: m) } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(m.date.formatted(date: .abbreviated, time: .shortened)).font(.headline)
@@ -23,12 +24,13 @@ struct MyMatchesView: View {
                             }
                             HStack(spacing: 12) {
                                 Label("\(m.clipFiles.count) кліпів", systemImage: "film"); Label("\(m.goals)", systemImage: "soccerball")
-                                if !m.chunkFiles.isEmpty { Label("4K на телефоні", systemImage: "internaldrive") }
+                                if !MatchStore.chunks(m).isEmpty { Label("4K на телефоні", systemImage: "internaldrive") }
                             }.font(.caption).foregroundStyle(.secondary)
-                            if let w = m.watchURL { Link(w, destination: URL(string: w)!).font(.caption) }
+                            if m.recording == true { Label("запис перервано", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.yellow) }
+                        }
                         }
                         .swipeActions {
-                            if !m.chunkFiles.isEmpty { Button("Видалити 4K", role: .destructive) { MatchStore.deleteRecording(m); matches = MatchStore.load() } }
+                            if !MatchStore.chunks(m).isEmpty { Button("Видалити 4K", role: .destructive) { MatchStore.deleteRecording(m); matches = MatchStore.load() } }
                         }
                     }
                 }

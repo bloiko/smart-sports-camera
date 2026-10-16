@@ -31,6 +31,25 @@ The stream shows a TV-style score bug in the top left corner of the 1080p pictur
 
 Before the game the "Команди" row opens a sheet with the two names, 10 jersey-colour swatches and a show/hide switch; names and colours are kept for the next match. During the game the live screen has big − and + per team, a pause button and "Час і тайм": half (1st/2nd), half length (10–45 min), any clock time (late arrival), added time (0 = hidden), pause for half-time; switching to the 2nd half sets the clock to the half length and clears added time. A new Go live starts at 0:0, 1st half; resuming after a crash keeps everything.
 
+## Matches on the phone (2026-10-16)
+
+Each match is recorded into its own folder `Documents/matches/match_<date-time>/` with `chunks/` (4K, 3-minute files,
+10 s fragments) and `highlights/` (clips).
+- **Nothing is overwritten.** Before this, every Go live restarted at `chunk_001` in one shared folder and overwrote the
+  previous match; that is how the owner's first stadium recording was lost.
+- **Resume.** After a crash, resuming the broadcast continues the numbering in the same folder.
+- **The record appears at Go live**, marked "запис перервано" until Stop, so a recording cut by a crash or a kill is
+  still listed and playable up to its last fragment.
+
+Tapping a match in "Мої матчі" opens the match screen:
+- **"Переглянути":** the whole recording plays in one go, from all the chunks.
+- **"Зберегти у Фото":** the chunks are joined into one video without re-encoding, then saved; if there is not enough
+  space for the joined copy, they are saved part by part.
+- **The highlight clips:** play and share.
+
+The result screen after Stop has the same save button. The app asks for "add to Photos" permission
+(`NSPhotoLibraryAddUsageDescription`).
+
 ## Name
 
 Working name **Follo** (follow the game): short, reads the same in Ukrainian and English, works as a verb, neutral across sports. Motto on the splash screen: "Follo the match." Known clashes to check before publishing: several unrelated "Follo" apps in the stores (construction logistics, finance, healthcare), the Follo region in Norway and its football club, the follo.com domain. Store title should be "Follo: AI sports camera"; domain candidates follo.cam, getfollo.com. Previous working name PitchCam was dropped because of PitchCom/PitchVision/Pitchcam in sports.

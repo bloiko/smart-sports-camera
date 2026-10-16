@@ -3,12 +3,12 @@ import AVFoundation
 import FolloCore
 
 /// Пункт «після Стоп»: хайлайти з записаних 4K-файлів і live-траєкторії (без повторної детекції).
-/// Кольори форми зібрано під час ефіру (LivePipeline.jerseys), кікоф → гол, кліпи 16:9 і 9:16 у Documents/highlights/.
+/// Кольори форми зібрано під час ефіру (LivePipeline.jerseys), кікоф → гол, кліпи 16:9 і 9:16 у папку матчу.
 final class HighlightsRunner {
     struct Clip { let file: URL; let vertical: URL; let label: String; let kind: String; let start: Double; let end: Double }
 
     /// `chunks`: файли запису по порядку; `cam`, `pipe`, `env` — з LiveCameraRunner після Стоп.
-    static func make(chunks: [URL], cam: LiveCamera, jerseys: [JerseySample], env: LiveEnv, progress: @escaping (String) -> Void) throws -> [Clip] {
+    static func make(chunks: [URL], cam: LiveCamera, jerseys: [JerseySample], env: LiveEnv, outDir: URL, progress: @escaping (String) -> Void) throws -> [Clip] {
         guard let goals = cam.goals, !chunks.isEmpty else { return [] }
         progress("Склеюю запис…")
         let comp = AVMutableComposition(); let track = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
@@ -23,7 +23,7 @@ final class HighlightsRunner {
         let (T, S) = Kickoff.separation(jerseys, centreX: (goals[0].x + goals[1].x) / 2, fps: cam.fps); let kicks = Kickoff.find(T, S)
         let zc = cam.zoneCounts(); var ms = Highlights.moments(cam.frames, fps: cam.fps, goals: goals, sFrames: zc.frames, zn: zc.zn, base: zc.base)
         Highlights.markGoals(&ms, kickoffs: kicks); ms = ms.filter { $0.score >= Highlights.minScore }
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("highlights")
+        let dir = outDir                                                  // <match>/highlights: кліпи кожного матчу окремо
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("vertical"), withIntermediateDirectories: true)
         let paths = [ClosePath.make(cam.frames, fps: cam.fps, W: env.W, H: env.H, top: env.top, bot: env.bot, goals: goals),
                      ClosePath.make(cam.frames, fps: cam.fps, W: env.W, H: env.H, top: env.top, bot: env.bot, goals: goals, vertical: true)]

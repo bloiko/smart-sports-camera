@@ -47,7 +47,7 @@ struct FolloApp: App {
             return e.compactMap { ($0 as? URL).flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize } }.reduce(0) { $0 + Int64($1) }
         }
         var freed: Int64 = 0
-        for name in ["chunks", "highlights"] { let u = docs.appendingPathComponent(name); freed += size(u); try? fm.removeItem(at: u) }
+        for name in ["chunks", "highlights", "matches"] { let u = docs.appendingPathComponent(name); freed += size(u); try? fm.removeItem(at: u) }
         let m = docs.appendingPathComponent("matches.json"); freed += Int64((try? m.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0); try? fm.removeItem(at: m)
         let free = (try? docs.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage) ?? 0
         let text = String(format: "wiped matches: freed %.2f GB; free space now %.1f GB\n", Double(freed) / 1e9, Double(free ?? 0) / 1e9)

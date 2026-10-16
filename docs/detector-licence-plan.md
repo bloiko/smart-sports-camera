@@ -1,108 +1,111 @@
-# Plan: replace the AGPL detectors with permissively licensed ones, same results
+# Plan: nothing under someone else's licence in the product (own detectors, own streaming)
 
-Status: proposal, 2026-10-16. Owner asked: is it realistic to keep today's results, and how exactly.
+Status: plan, 2026-10-16. Owner's rule (2026-10-16): **the finished app contains only our own code and our own model
+weights; nothing under another software licence.** This replaces the earlier idea of switching to Apache-2.0 detectors.
 
-## Why
+## Boundary
 
-| What ships in the app today | Built with | Licence |
+| | Allowed | Why |
 | --- | --- | --- |
-| `players.mlpackage` (people + "sports ball" hints) | stock `yolo11s.pt`, exported by Ultralytics | AGPL-3.0 |
-| `ball.mlpackage` (ball in a 320 px ROI, 2× up) | `ball_v02.pt`: YOLO11n fine-tuned with Ultralytics on our pseudo-labels | AGPL-3.0 (Ultralytics treats weights trained with its package as AGPL) |
+| Apple system frameworks (AVFoundation, Core ML, Vision, VideoToolbox, Network, SwiftUI…) | Yes | The platform itself; every iOS app uses them, nothing is bundled |
+| Dev tools on the Mac (Python, PyTorch, NumPy, OpenCV, ffmpeg, coremltools, Xcode) | Yes, never shipped | They only produce our files (weights, `.mlpackage`); the output is ours |
+| Third-party models (YOLO, DETR…) as a temporary teacher on the Mac | Only to bootstrap labels, removed at the end | Their outputs are data; the shipped weights are trained by our code on our data |
+| Data: SoccerTrack v2 (CC BY 4.0) and the owner's own matches | Yes for training; attribution in the app's "About" for SoccerTrack | Data, not software; long term our own footage dominates |
+| Any third-party code or weights inside the app | **No** | Owner's rule |
 
-A closed, paid iOS app that bundles these models would have to publish its full source under AGPL, or buy an
-Ultralytics Enterprise licence. Our own code (camera, tracker, goals, scoreboard, `Detector.swift`) does not depend on
-Ultralytics. Only the two models and the Python scripts that make them do (`export_coreml.py`, `detect.py`, `live_sim.py`, training).
+## What has to go
 
-Data: the three test matches appear to be from SoccerTrack v2 (CC BY 4.0, gated on Hugging Face), which allows
-commercial use with attribution. To confirm (Phase 0). SoccerTrack v2 labels are pitch coordinates, teams and
-ball actions (Pass, Shot…), not image boxes. The ball actions can extend our goal/shot checklists for free.
+| In the app today | Licence | Replacement |
+| --- | --- | --- |
+| `players.mlpackage` (stock YOLO11s) | AGPL-3.0 | **FolloNet-P**: own player detector |
+| `ball.mlpackage` (YOLO11n fine-tuned with Ultralytics) | AGPL-3.0 | **FolloNet-B**: own ball detector |
+| HaishinKit + Logboard (RTMP streaming) | BSD-3-Clause | **Own RTMP(S) client** on Network.framework, fed by our own VideoToolbox encoder (this also gives the 60 s buffer, `remote-and-buffer-plan.md`) |
+| Google Sign-In SDK (planned) | Apache-2.0 | Own OAuth with `ASWebAuthenticationSession` + PKCE (system) |
 
-## Is the same result realistic?
+Everything else is already ours: camera logic, tracker, goals, field mask, highlights, scoreboard, `Detector.swift`.
 
-Yes, with one open question: speed on the phone.
+## Own detectors: realistic with the same results?
 
-- **Players.** We use a stock COCO model with no fine-tuning. Several Apache-2.0 detectors are as accurate or more
-  accurate on COCO (RF-DETR N/S/M/L, D-FINE, DEIM, RT-DETR v1–v2, YOLOX, DAMO-YOLO). After fine-tuning on football frames
-  they should beat today's model on far, small players, because domain data matters more than COCO points.
-- **Ball.** Today's model is tiny and trained on 249 pseudo-labels plus interpolations. That is easy to reproduce with
-  any small detector. A small heatmap network written by us is also possible; it would be fully our own computation,
-  which matches the owner's rule.
-- **Speed (the risk).** The phone budget, measured on the M1 Mac:
+**Yes, with more work than switching models, because we train from scratch: no borrowed architecture code and no
+pretrained weights.** It is realistic for three reasons:
 
-  | Pass | When | Mac time |
-  | --- | --- | --- |
-  | Players, 2 tiles at 1280×672 | every 4th frame | 36–55 ms |
-  | Ball ROIs at 640×640 | every 2nd frame, 1–2 ROIs | 8–14 ms each |
+- **The task is much narrower than general object detection.** One class of people seen from a high fixed camera, and one
+  small ball. The camera logic does not need boxes. It needs player **foot points** and **height**, and the **ball
+  centre**. Heatmap networks in the style of CenterNet do exactly that and are simple to write and train.
+- **There is plenty of data.** SoccerTrack v2 has 10 full matches in 4K; today we use 4 minutes of 3 of them. That is
+  hundreds of thousands of frames, and the owner's matches will add more.
+- **The phone budget favours a purpose-built small network.** A convolution-only design sized for the Neural Engine
+  should be faster than today's YOLO11s on 1280×672 tiles.
 
-  CNN detectors (YOLOX, DAMO-YOLO) run well on the Neural Engine. DETR detectors use deformable attention
-  (`grid_sample`), which may fall back to the GPU or CPU: one report has RF-DETR nano at 384×384 at about 15 fps on an
-  iPhone 14 Pro without the Neural Engine, which would be too slow for 1280×672 tiles. RF-DETR has an official Core ML
-  export, so this is a measurement, not guesswork.
+Risks and how we handle them:
 
-## Rules for the new chain (licence hygiene)
+| Risk | Handling |
+| --- | --- |
+| Training from scratch needs many labelled frames | Labels from three sources, all producing data, not shipped code (below); heavy augmentation (colour, blur, scale, lighting, compression) |
+| Generalising to other stadiums (SoccerTrack is a few university pitches) | Owner's own matches as soon as they exist; a self-training loop: our model labels new matches, our tracker filters the labels, retrain |
+| Far, small players (15–30 px tall) | High-resolution output (stride 4), the pitch band only (as the 16:9 tiles already do) |
+| A tiny fast ball | The ball network sees 3 consecutive ROI frames (motion), a known strong approach |
+| Training time on the M1 | Small networks; resumable training (checkpoint every epoch, project rule); a free cloud GPU only if needed |
 
-- **Shipped artefacts** must be Apache-2.0, MIT or BSD code and weights, or our own: the models, the export and the runtime.
-- **Training stack:** PyTorch (BSD) and the candidate's own Apache/MIT repository. Never the `ultralytics` package.
-- **Labels.** Labels from the old model are model outputs, generally not covered by AGPL when the new model is trained
-  outside Ultralytics. To stay clean anyway, the training labels come from a large Apache model run offline on the Mac
-  (teacher), checked by our tracker; the old model is kept only as a measuring stick in evaluation.
-- **COCO-pretrained weights** are the industry norm, but the images have mixed Flickr licences. Note this for the
-  lawyer check before release; the fallback is pretraining on our own and SoccerTrack frames only.
-- **Before the paid release:** a NOTICE file (Apache attributions, SoccerTrack CC BY attribution), a short one-off check
-  by a lawyer, and a CI check that `ultralytics` is not in any shipped artefact.
+## Labels without shipping anyone's code
 
-## Candidates
+1. **SoccerTrack v2 annotations: human-made, CC BY 4.0.** Each player's position on the pitch every frame. A
+   pitch-to-image homography from the pitch lines (own code: we already find the field mask and the halfway line) projects
+   them into the image as foot points. Box height comes from depth: about 1.8 m at the measured scale. These are the best
+   labels: human truth.
+2. **Teacher labels (bootstrap only).** Today's models, or any large detector, run offline on the Mac. Their outputs
+   become extra labels where 1 does not reach: the ball, frames without annotations. Our tracker confirms or drops them.
+   The teacher is never shipped and is removed once FolloNet labels better than it.
+3. **Own self-training.** From version 2 on, FolloNet labels new footage itself, cleaned by the tracker and the
+   SoccerTrack truth.
 
-| Model | Licence (code / weights, to re-check in the repo) | Type | Core ML | Expected phone speed | Role |
-| --- | --- | --- | --- | --- | --- |
-| YOLOX-s / tiny / nano | Apache-2.0 | CNN, anchor-free | Plain conv net, converts with coremltools | Fast, Neural Engine | **Safe default** for players and ball |
-| D-FINE-S / DEIM-S | Apache-2.0 | DETR (CNN backbone, deformable decoder) | `grid_sample` risk | Unknown | Accuracy candidate |
-| RF-DETR N/S | Apache-2.0 (N–L; XL/2XL are not) | DETR (DINOv2 backbone) | Official native export | Possibly slow at 1280 | Accuracy candidate, and offline teacher (M/L on the Mac) |
-| DAMO-YOLO-T/S | Apache-2.0 | CNN | Converts | Fast | Second CNN option |
-| Apple Vision human detection | System framework, free | Unknown | Built in | Fast | Zero-training baseline for players |
-| Own ball heatmap CNN | Ours | Small U-Net on ROI patches | Trivial | Very fast | Ball, "own computation" |
+Hold-out, per project rule: matches 1–3 (today's checklists) and the last 20% of every video are never trained on.
 
-Not usable: YOLOv5/v8/11 and YOLOv10 (AGPL), YOLOv6/v7/v9 originals (GPL-3.0), YOLO-NAS weights (restrictive).
-MIT re-releases (MultimediaTechLab YOLO, LibreYOLO) exist, but the weight licences need checking; keep them as
-reserve options.
+## Network designs (written by us from scratch, PyTorch on the Mac → Core ML)
 
-## Acceptance criteria ("same result")
+- **FolloNet-P (players).**
+  - Input: a pitch-band tile, the same tiles as today, 1280×672.
+  - Body: a small conv stack (depthwise-separable blocks, about 1–2 M parameters).
+  - Outputs at stride 4: a foot-point heatmap, a height map, and an optional "near the ball" score.
+  - A Core ML pipeline step turns the heatmap peaks into the same boxes `Detector.swift` reads today, so the tracker and camera do not change.
+- **FolloNet-B (ball).**
+  - Input: the 320 px ROI from 3 consecutive frames (9 channels).
+  - Output: a ball-centre heatmap and confidence.
+  - Trained with hard negatives: spare balls beyond the line, heads, line crossings, the look-alikes found on 2026-10-15.
+- **Core ML.** Plain convolutions only, so everything runs on the Neural Engine. Exported with coremltools (a dev tool); the `.mlpackage` is ours.
 
-Measured exactly as today (Core ML on the Mac, aligned frames, `follosim`, `eval_live.py`, checklists), on the 3 matches,
-the 16:9-padded versions, and the owner's own footage when it exists:
+## Acceptance criteria (unchanged: "same result")
 
-| Metric | Today (Core ML) | Required |
+| Metric | Today (Core ML, aligned) | Required |
 | --- | --- | --- |
 | Goal checklist | 7/7 | 7/7 |
-| Ball in crop | 97.8% / 93.8% / 78.5% | Not lower by more than 1 point on any match |
+| Ball in crop | 97.8% / 93.8% / 78.5% | Not lower by more than 1 point |
 | Jumps, twitches | 1.4–2.3%, 0.8–1.8 per min | Not worse |
-| Player recall vs today's model (IoU ≥ 0.5), far half | — | ≥ 97% (more is fine) |
-| iPhone 15: players pass (2 tiles) | to measure | ≤ 60 ms |
-| iPhone 15: ball ROI | to measure | ≤ 15 ms |
-| Live run on the phone, 30 min | 25–30 fps, ~600 MB, thermal ok | Same |
+| Player recall vs today's model, far half | — | ≥ 97% |
+| iPhone 15 players pass / ball ROI | to measure | ≤ 60 ms / ≤ 15 ms |
+| 30-min phone run | 25–30 fps, ~600 MB, thermal ok | Same |
 
 ## Phases
 
-| Phase | Work (Claude) | Owner | Effort |
+| # | Work (Claude) | Owner | Effort |
 | --- | --- | --- | --- |
-| 0. Inventory | List every Ultralytics touch point; confirm the SoccerTrack v2 source and licence on its page; write the rules above into `docs/decisions.md` | Accept the dataset terms on Hugging Face if gated | 0.5 day |
-| 1. Benchmark harness | Make `Detector.swift` take any Core ML model with the same outputs (boxes + scores via an NMS pipeline built in coremltools). Freeze a benchmark: the players and ball ROIs of the 3 matches plus the 16:9 versions, scored against today's model. Add a phone model-speed mode (`--bench-models`: ms per tile on the device) | Phone connected for 10 min | 2 days |
-| 2. Players, zero-shot | Export COCO-pretrained YOLOX-s, D-FINE-S (or DEIM-S), RF-DETR-N and Apple Vision to Core ML; measure recall and phone speed; keep 1–2 | — | 3 days |
-| 3. Player data | Frames from all 10 SoccerTrack v2 matches (today we use 3), labelled by the offline teacher (RF-DETR-M/L or D-FINE-L on the Mac), cleaned by tracking consistency; hold out matches 1–3 and the last 20% of each video (project rule) | — | 2–3 days of Mac compute, resumable |
-| 4. Fine-tune players | Fine-tune the chosen small model; training on the M1 (MPS), resumable after every epoch; if too slow, a free Kaggle/Colab GPU on the owner's account | Kaggle/Colab account if needed | 3–4 days |
-| 5. Ball | Patch dataset from the tracker-confirmed balls (positives) and look-alikes: spare balls, heads, line crossings (negatives). Train YOLOX-nano at 640 and our own heatmap CNN; compare with `follosim ballroi`-style agreement and end to end; keep the better | — | 3–4 days |
-| 6. Integration | `src/export_coreml_*.py` for the new models; Python reference detection with the same models; Swift = Python parity (SAME TRACK / SAME PATH); all acceptance metrics; 30-min phone run | Phone for 30–40 min | 2 days |
-| 7. Switch and clean | Replace the bundled models; remove `ultralytics` from every shipped path (keep it only as an optional measuring stick in dev scripts, or drop it); NOTICE file; CI licence check; update `architecture.md` and `datasets.md` | Lawyer check before the paid release (one-off) | 1 day |
+| 0 | Confirm the SoccerTrack v2 source and terms; download all 10 matches with annotations; record the boundary above in `decisions.md` | Accept the dataset terms if gated | 0.5 day |
+| 1 | Benchmark harness: `Detector.swift` takes any model with the same outputs; frozen benchmark on matches 1–3 and the 16:9 versions; phone speed mode | Phone 10 min | 2 days |
+| 2 | Own homography from pitch lines; project the SoccerTrack positions into the image; check on contact sheets (look at the output, project rule) | — | 3 days |
+| 3 | Player dataset: projected human labels + teacher labels, tracker-cleaned, augmented | — | 2 days, resumable |
+| 4 | FolloNet-P: write, train from scratch, export, measure; iterate on size until the phone budget and the recall hold | — | 5–7 days |
+| 5 | FolloNet-B: ROI dataset with hard negatives, 3-frame input, train, compare end to end | — | 4–5 days |
+| 6 | Own RTMP(S) client + own encoder: handshake, FLV/AVC/AAC packets, chunking over TLS (Network.framework); tested against `ffmpeg -listen` on the Mac, then YouTube; replaces HaishinKit and gives the 60 s buffer | Phone + home Wi-Fi | 5–6 days |
+| 7 | Own OAuth (`ASWebAuthenticationSession` + PKCE) instead of the Google Sign-In SDK | Google Cloud project | 1–2 days |
+| 8 | Integration: Python reference = Swift parity; every acceptance metric; 30-min phone run; remove the teacher and HaishinKit; a build check that fails on any third-party package or model | Phone 40 min | 2 days |
 
-Total: about 3 weeks at the current pace. Nothing here blocks the first test matches. The work can run in parallel with
-the app, and the switch happens only when every acceptance criterion holds.
+Total: about 5–6 weeks at the current pace. Order: phase 6 first (it is needed for real broadcasts anyway and removes
+HaishinKit); the detector phases run on the Mac in parallel; the switch happens only when every acceptance criterion holds.
 
-## Fallbacks
+## Fallbacks (still all own)
 
-- **No Apache model is fast enough at 1280×672.** Use YOLOX-tiny on smaller band tiles (3 tiles at 960 px), or run the
-  players pass every 6th frame instead of every 4th; the tracker tolerates it, but this must be checked on the checklists.
-- **The ball model is worse than today.** Add temporal input (3 consecutive ROI frames) to our own heatmap CNN, which is
-  a known strong approach for small fast balls; or keep a bigger ROI model at 2 ROIs only while the ball is lost.
-- **The legal check says COCO-pretrained weights are a problem.** Pretrain only on SoccerTrack and our own footage; this
-  needs more data, so collect the owner's matches from now on.
-- **Last resort:** an Ultralytics Enterprise licence (paid), only if the product already earns.
+- **FolloNet-P misses far players.** Raise the output resolution in the band, add a second pass on far-half tiles every 8th
+  frame, or train longer with more SoccerTrack matches.
+- **FolloNet-B is weaker than today's ball model.** Use more temporal context (5 frames), add our background-difference
+  map as an extra input channel (own computation we already have), or use a larger ROI model only while the ball is lost.
+- **Not enough diversity.** Collect the owner's matches from now on: every recorded game is training data.

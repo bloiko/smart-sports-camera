@@ -419,6 +419,25 @@ byte count to message numbers.
 **Still to test on YouTube.** Whether it honours our acknowledgement window, and how it treats a re-sent GOP with
 earlier timestamps on a new connection.
 
+## Own stack, stage 1e: own AAC audio (2026-10-16, Mac)
+
+`FolloCore/AudioEncoder.swift` encodes AAC-LC on AVAudioConverter (system framework): PCM in, 1024-sample packets out,
+plus its own AudioSpecificConfig. Tests use `follosim aacenc VIDEO OUT.flv` and `follosim stream … --audio`, which adds
+the match audio in step with the video. "Before" is the same Apple encoder through ffmpeg (`aac_at`, 128 kbit/s) on
+the same audio.
+
+| Test | Result |
+| --- | --- |
+| Match 2, 20 s, 48 kHz mono | 937 packets for 959,872 samples, 125 kbit/s, AAC LC, decodes without errors |
+| Quality vs the source | ours SNR 41.6 dB, before (ffmpeg `aac_at`) 34.8 dB |
+| Loudness | Equal to the source (−49.4 dB); the match 3 track is digital silence in the source itself (−91 dB) |
+| Stereo, 440 Hz left / 880 Hz right | Channels correct |
+| Stream with audio, 30 s, no drop | Video 750/750, audio 1413/1413; the server sees H.264 1080p + AAC 48 kHz; decodes cleanly |
+| Stream with audio, reset 30 s | Video 0 missing, 46 duplicates; audio 0 missing, 78 duplicates (the same 1.7 s resent from the keyframe) |
+
+Audio leads video by the AAC encoder delay (2112 samples, 44 ms at 48 kHz), the same as ffmpeg. Lip-sync on the phone
+uses the capture timestamps of the camera and the microphone, so it is checked in stage 1f on the device.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

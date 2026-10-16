@@ -164,13 +164,38 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
     var cfg = FolloStreamer.Config(); if let c = arg("--capacity") { cfg.capacityS = Double(c)! }; if let c = arg("--catchup") { cfg.catchUp = Double(c)! }
     let st = FolloStreamer(url: arg("--rtmp")!, key: arg("--key") ?? "test", config: cfg)
     st.trustAnyCertificateForTests = args.contains("--insecure-tls"); st.requestAcksForTests = !args.contains("--no-ack-request"); st.log = { log("streamer: " + $0) }
-    let sent = try! FLVWriter(path: arg("--sent")!, audio: false); var headerDone = false; var produced = 0
+    let withAudio = args.contains("--audio")
+    let sent = try! FLVWriter(path: arg("--sent")!, audio: withAudio); var headerDone = false; var produced = 0
     let q = DispatchQueue(label: "enc.out")
+    // --audio: the match audio through our AAC encoder, fed in step with the video frames (stage 1e)
+    var ae: AudioEncoder?; var pcmChunks: [(Double, AVAudioPCMBuffer)] = []; var nextChunk = 0; var audioPackets = 0
+    if withAudio {
+        let asset = AVURLAsset(url: URL(fileURLWithPath: args[2])); let tr = asset.tracks(withMediaType: .audio)[0]
+        let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(tr.formatDescriptions.first as! CMAudioFormatDescription)!.pointee
+        var aset = AudioEncoder.Settings(); aset.sampleRate = asbd.mSampleRate; aset.channels = Int(asbd.mChannelsPerFrame); let e = try! AudioEncoder(aset); ae = e
+        let r = try! AVAssetReader(asset: asset)
+        r.timeRange = CMTimeRange(start: CMTime(seconds: Double(f0) / fps, preferredTimescale: 48000), duration: CMTime(seconds: Double(n) / fps + 1, preferredTimescale: 48000))
+        let o = AVAssetReaderTrackOutput(track: tr, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: true, AVLinearPCMIsBigEndianKey: false])
+        r.add(o); r.startReading(); var at = 0.0
+        while let sb = o.copyNextSampleBuffer() {
+            let k = CMSampleBufferGetNumSamples(sb); guard k > 0 else { continue }
+            let pcm = AVAudioPCMBuffer(pcmFormat: e.inputFormat, frameCapacity: AVAudioFrameCount(k))!; pcm.frameLength = AVAudioFrameCount(k)
+            CMSampleBufferCopyPCMDataIntoAudioBufferList(sb, at: 0, frameCount: Int32(k), into: pcm.mutableAudioBufferList)
+            pcmChunks.append((at, pcm)); at += Double(k) / aset.sampleRate
+        }
+        e.onPacket = { d, sample in
+            let ms = UInt32((Double(sample) / aset.sampleRate * 1000).rounded()), body = FLV.audioPacket(d)
+            q.sync { sent.write(.audio, ms: ms, body: body) }; st.push(.audio, body: body, ms: ms, isKey: false); audioPackets += 1
+        }
+        log("audio: \(Int(aset.sampleRate)) Hz × \(aset.channels), \(pcmChunks.count) PCM chunks preloaded")
+    }
     enc.onFrame = { fr in q.sync {
         let ms = UInt32((CMTimeGetSeconds(fr.pts) * 1000).rounded())
         if !headerDone, let avcC = FLV.avcC(of: fr.format) {
-            let meta = FLV.metadata(width: 1920, height: 1080, fps: fps, videoKbps: 4500, audio: false), avc = FLV.videoSequenceHeader(avcC: avcC)
-            sent.write(.script, ms: 0, body: meta); sent.write(.video, ms: 0, body: avc); st.setHeaders(meta: meta, avc: avc); headerDone = true
+            let meta = FLV.metadata(width: 1920, height: 1080, fps: fps, videoKbps: 4500, audio: ae != nil), avc = FLV.videoSequenceHeader(avcC: avcC)
+            let aac = ae.map { FLV.audioSequenceHeader(asc: $0.audioSpecificConfig) }
+            sent.write(.script, ms: 0, body: meta); sent.write(.video, ms: 0, body: avc); if let a = aac { sent.write(.audio, ms: 0, body: a) }
+            st.setHeaders(meta: meta, avc: avc, aac: aac); headerDone = true
         }
         let body = FLV.videoPacket(fr.data, isKey: fr.isKey)
         sent.write(.video, ms: ms, body: body); st.push(.video, body: body, ms: ms, isKey: fr.isKey); produced += 1
@@ -190,6 +215,7 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
             ctx.render(img, to: o!, bounds: CGRect(x: 0, y: 0, width: 1920, height: 1080), colorSpace: CGColorSpaceCreateDeviceRGB())
             let due = t0.addingTimeInterval(Double(i) / fps).timeIntervalSinceNow; if due > 0 { usleep(useconds_t(due * 1_000_000)) }
             enc.encode(o!, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())))
+            if let e = ae { while nextChunk < pcmChunks.count && pcmChunks[nextChunk].0 < Double(i + 1) / fps { e.append(pcmChunks[nextChunk].1); nextChunk += 1 } }
             if let j = arg("--jump-at").map({ Int(Double($0)! * fps) }), i == j { log("jump to live (delay was \(String(format: "%.1f", st.delayS)) s)"); st.jumpToLive() }
             if i % Int(5 * fps) == 0 { log(String(format: "t=%3.0f s publishing %@ delay %.1f s reconnects %d ring %.1f MB (peak %.1f) resent %d dropped-from-ring %d", Double(i) / fps, st.isPublishing ? "yes" : "NO ", st.delayS, st.reconnects, Double(st.ringBytes) / 1e6, Double(st.ringPeakBytes) / 1e6, st.resentFrames, st.droppedFromRing)) }
             return true
@@ -197,9 +223,36 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
         if !more { break }
     }
     enc.flush(); q.sync {}; sent.close()
-    log("produced \(produced) frames; draining…")
+    log("produced \(produced) frames, \(audioPackets) audio packets; draining…")
     let done = DispatchSemaphore(value: 0); st.stop(drainS: Double(arg("--drain") ?? "150")!) { done.signal() }; done.wait()
     log(String(format: "final: reconnects %d, drops resolved by server acks %d, resent %d, dropped-from-ring %d, ring peak %.1f MB, sent items %d", st.reconnects, st.ackedDrops, st.resentFrames, st.droppedFromRing, Double(st.ringPeakBytes) / 1e6, st.sentFrames))
+case "aacenc":   // follosim aacenc VIDEO OUT.flv [--from S] [--seconds N] [--bitrate B] — stage 1e: the match audio through our AAC encoder
+    func log(_ t: String) { FileHandle.standardError.write((t + "\n").data(using: .utf8)!) }
+    let asset = AVURLAsset(url: URL(fileURLWithPath: args[2])); let tr = asset.tracks(withMediaType: .audio)[0]
+    let fd = tr.formatDescriptions.first as! CMAudioFormatDescription
+    let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd)!.pointee
+    var aset = AudioEncoder.Settings(); aset.sampleRate = asbd.mSampleRate; aset.channels = Int(asbd.mChannelsPerFrame)
+    if let b = args.firstIndex(of: "--bitrate").map({ Int(args[$0 + 1])! }) { aset.bitrate = b }
+    let ae = try! AudioEncoder(aset)
+    let from = args.firstIndex(of: "--from").map { Double(args[$0 + 1])! } ?? 0, secs = args.firstIndex(of: "--seconds").map { Double(args[$0 + 1])! } ?? 10
+    let r = try! AVAssetReader(asset: asset); r.timeRange = CMTimeRange(start: CMTime(seconds: from, preferredTimescale: 48000), duration: CMTime(seconds: secs, preferredTimescale: 48000))
+    let o = AVAssetReaderTrackOutput(track: tr, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true,
+                                                                AVLinearPCMIsNonInterleaved: true, AVLinearPCMIsBigEndianKey: false])
+    r.add(o); r.startReading()
+    let flv = try! FLVWriter(path: args[3], audio: true)
+    flv.write(.audio, ms: 0, body: FLV.audioSequenceHeader(asc: ae.audioSpecificConfig))
+    var sizes: [Int] = []
+    ae.onPacket = { d, sample in flv.write(.audio, ms: UInt32((Double(sample) / aset.sampleRate * 1000).rounded()), body: FLV.audioPacket(d)); sizes.append(d.count) }
+    var frames = 0
+    while let sb = o.copyNextSampleBuffer() {
+        let n = CMSampleBufferGetNumSamples(sb); guard n > 0 else { continue }
+        let pcm = AVAudioPCMBuffer(pcmFormat: ae.inputFormat, frameCapacity: AVAudioFrameCount(n))!; pcm.frameLength = AVAudioFrameCount(n)
+        CMSampleBufferCopyPCMDataIntoAudioBufferList(sb, at: 0, frameCount: Int32(n), into: pcm.mutableAudioBufferList)
+        ae.append(pcm); frames += n
+    }
+    flv.close()
+    let kbps = Double(sizes.reduce(0, +)) * 8 / (Double(frames) / aset.sampleRate) / 1000
+    log("audio \(Int(aset.sampleRate)) Hz × \(aset.channels): \(frames) samples in, \(ae.packets) AAC packets out, \(Int(kbps)) kbit/s, ASC \(ae.audioSpecificConfig.map { String(format: "%02x", $0) }.joined()) → \(args[3])")
 case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [

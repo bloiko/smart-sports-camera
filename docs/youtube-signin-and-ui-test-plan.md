@@ -116,6 +116,7 @@ drops, and switches visibility on request.
   (`beginBackgroundTask`). The camera stops, but the connection and the ring stay, so a swipe away and back costs no
   reconnect. Test from the Mac by opening Settings on the phone for 1, 5 and 30 s; compare reconnects and delay before
   and after.
+- **Faster restart:** when GO LIVE continues a saved match, take the 7 position frames 1 s apart instead of 10 s (the check itself stays).
 - **Warn when the app leaves the screen:** a sound and a vibration. Suggest Guided Access for matches.
 
 ## Stage 3. Camera quality on the owner's stadium
@@ -139,7 +140,7 @@ detector is compared with the current one on the same checklists before it repla
 | Stage | Needs the owner | Status |
 | --- | --- | --- |
 | 0 UI tests on the simulator | no | done 2026-10-16 (see results below) |
-| 1 Google sign-in, unlisted, stable link | 15 min setup + one sign-in on the phone | code and Mac/simulator tests done 2026-10-17; phone test next |
+| 1 Google sign-in, unlisted, stable link | 15 min setup + one sign-in on the phone | done 2026-10-17 (phone test passed) |
 | 2 Drops and background | 1 Wi-Fi test | planned |
 | 3 Camera quality | footage from the stadium | planned |
 | 4 Own detectors | no | planned |
@@ -203,3 +204,20 @@ detector is compared with the current one on the same checklists before it repla
   - GO LIVE → check the youtu.be link on another phone (unlisted);
   - kill the app → GO LIVE → same link;
   - STOP → the broadcast ends in Studio.
+
+### Phone test (2026-10-17, iPhone 15, real Google and YouTube)
+
+- **Sign-in.** The owner signed in in the system sheet; the channel name loaded.
+- **GO LIVE.** Broadcast `Ib7Nb7IcBOw` was created and bound, and YouTube accepted the stream on the first connection.
+- **Visibility.**
+  - The broadcast came back **private**. The log did not record the requested visibility, so the cause is unknown:
+    most likely the picker was on "Приватне".
+  - Switching to unlisted from the app worked (`PUT liveBroadcasts → 200`, unlisted). So YouTube does not lock our
+    unverified project to private.
+  - The log now records the requested visibility next to YouTube's answer.
+- **Restart mid-match.** The app was killed from the switcher; GO LIVE reused `Ib7Nb7IcBOw` (live, unlisted), with the
+  same link and the same match folder. YouTube accepted the stream in 0.5 s.
+- **STOP** ended the broadcast (`transition → 200`).
+- **Gap after a restart: about 1.5 min**, about 1 min of it the position check (7 frames, one every 10 s). **Stage 2
+  item:** when continuing a saved match, sample the position frames every second, so the check takes about 10 s. The
+  rule stays: no stream before the check passes.

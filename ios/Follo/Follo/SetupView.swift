@@ -221,7 +221,7 @@ struct SetupView: View {
                     yt.streamId = st.id; livePrivacy = b.privacy
                     if b.id == saved?.broadcastId { resume = true }
                     live = LiveTarget(broadcastId: b.id, rtmpsURL: st.ingestURL, streamKey: st.key, watchURL: b.watchURL)
-                    DebugLog.log("YouTube: broadcast \(b.id) \(b.privacy)\(resume ? " (same as before the restart)" : ""), engine \(Streamer.engine.rawValue)")
+                    DebugLog.log("YouTube: broadcast \(b.id) \(b.privacy) (asked \(privacy.rawValue))\(resume ? " (same as before the restart)" : ""), engine \(Streamer.engine.rawValue)")
                 }
                 else if !resume, let t = YouTubeLive.debugTarget() {                        // debug: свій RTMP-сервер (ffmpeg на Mac)
                     live = LiveTarget(broadcastId: "", rtmpsURL: t.url, streamKey: t.key, watchURL: t.url)

@@ -348,6 +348,32 @@ both files tag by tag and checks PreviousTagSize and that no bytes trail.
 
 Difference found and fixed: ffmpeg ends the stream with an AVC end-of-sequence tag; ours now does too.
 
+## Own stack, stage 1c: own RTMP(S) client (2026-10-16, Mac)
+
+`FolloCore/RTMPClient.swift` on Network.framework does the whole publishing side:
+- the simple handshake (C0/C1/C2);
+- the commands: set chunk size 4096, then connect → releaseStream, FCPublish, createStream → publish;
+- @setDataFrame onMetaData, and audio and video messages split into chunks, with extended timestamps;
+- the server's control messages: chunk size, window ack, set peer bandwidth, ping, and acknowledgements;
+- FCUnpublish and deleteStream when closing, and TLS for rtmps.
+
+Test: `follosim encode … --rtmp URL --key KEY` publishes the same packets it writes to `--flv`. The server is ffmpeg on
+the Mac (`ffmpeg -listen 1 -i rtmp://127.0.0.1:1935/live/test -c copy recv.flv`). "Before" is ffmpeg itself as the
+client, sending the same FLV.
+
+| Test | Result |
+| --- | --- |
+| Protocol | Connect.Success → createStream → Publish.Start, clean close; the server sees H.264 High 1920×1080 25 fps BT.709 |
+| Match 2, 10 s | 252/252 video tags received identical to the ones sent (body + timestamp); same as with ffmpeg as the client |
+| Match 3, 60 s, real time | 1502/1502 identical, 0 dropped, 4497 kbit/s |
+| Extended timestamps (start at 16,777,000 ms, crossing 0xFFFFFF) | Bodies 252/252 identical; ffmpeg's server shifts the timeline to start at 0, exactly as it does for ffmpeg as the client (our and ffmpeg's received files are identical) |
+| RTMPS through a local TLS proxy (self-signed, test flag) | TLS 1.2, Publish.Start, 252/252 identical |
+| RTMPS without the test flag | Refused: "bad certificate" (certificate checks are on by default, as needed for YouTube) |
+| No server / wrong URL | Fails in under a second with a clear reason, no hang |
+
+The ffmpeg server logs "Error during demuxing: Input/output error" at the end for both clients: it is how it reports
+the publisher leaving. Still to test: a real YouTube RTMPS ingest (possible from the Mac once the stream key exists).
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

@@ -123,7 +123,7 @@ Hold-out, per project rule: matches 1–3 (today's checklists) and the last 20% 
    - **1a.** H.264 encoder on VideoToolbox (`VideoEncoder`), compared with the same hardware encoder driven by ffmpeg:
      validity, GOP, bitrate, PSNR, speed, frames. **Done 2026-10-16** (`results.md`): equal quality, BT.709 tagged, bitrate steps work; the low step stays 1080p.
    - **1b.** Own FLV muxer, compared with ffmpeg's FLV of the same packets. **Done 2026-10-16:** every video tag byte-identical to ffmpeg on 3 runs (`results.md`).
-   - **1c.** Own RTMP client into a local `ffmpeg -listen` server: the received stream must equal what was sent.
+   - **1c.** Own RTMP client into a local `ffmpeg -listen` server: the received stream must equal what was sent. **Done 2026-10-16** (`results.md`): identical on every run, incl. RTMPS and extended timestamps; YouTube itself still to test.
    - **1d.** Encoded ring buffer and reconnect, through a local proxy that cuts the connection for 10/30/60 s: no frame lost.
    - **1e.** AAC audio.
    - **1f.** App integration behind the switch, default HaishinKit.

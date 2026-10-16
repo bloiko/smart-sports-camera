@@ -68,6 +68,18 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
                                        kCVPixelBufferHeightKey as String: OH, kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &pool)
     var writer: AVAssetWriter?, input: AVAssetWriterInput?
     let flvPath = args.firstIndex(of: "--flv").map { args[$0 + 1] }; var flv: FLVWriter?      // stage 1b: our FLV of the same packets
+    // stage 1c: --rtmp URL --key KEY publishes the same packets with our RTMP client (--realtime paces them at fps)
+    var rtmp: RTMPClient?
+    if let i = args.firstIndex(of: "--rtmp") {
+        let r = RTMPClient(); r.log = { log("rtmp: " + $0) }; r.trustAnyCertificateForTests = args.contains("--insecure-tls")
+        let ready = DispatchSemaphore(value: 0)
+        r.onState = { st in if st == .publishing { ready.signal() }; if case .failed = st { ready.signal() } }
+        r.connect(url: args[i + 1], key: args.firstIndex(of: "--key").map { args[$0 + 1] } ?? "test")
+        if ready.wait(timeout: .now() + 15) == .timedOut || r.state != .publishing { log("rtmp: not publishing (\(r.state))"); exit(2) }
+        rtmp = r
+    }
+    let realtime = args.contains("--realtime"); var sentHeader = false
+    let tsOffset = UInt32(args.firstIndex(of: "--ts-offset").map { args[$0 + 1] } ?? "0")!     // test the extended-timestamp path
     var sizes: [Int] = [], keys: [Int] = [], submitted: [Double] = [], latency: [Double] = []
     let out = URL(fileURLWithPath: args[4]); try? FileManager.default.removeItem(at: out)
     let q = DispatchQueue(label: "enc.out")
@@ -80,11 +92,19 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
             if let fp = flvPath, let avcC = FLV.avcC(of: fr.format) {
                 flv = try! FLVWriter(path: fp, audio: false)
                 flv!.write(.script, ms: 0, body: FLV.metadata(width: OW, height: OH, fps: fps, videoKbps: Double(es.bitrate) / 1000, audio: false))
-                flv!.write(.video, ms: 0, body: FLV.videoSequenceHeader(avcC: avcC))
+                flv!.write(.video, ms: tsOffset, body: FLV.videoSequenceHeader(avcC: avcC))
                 log("avcC \(avcC.count) bytes: \(avcC.prefix(8).map { String(format: "%02x", $0) }.joined())")
             }
         }
-        flv?.write(.video, ms: UInt32((CMTimeGetSeconds(fr.pts) * 1000).rounded()), body: FLV.videoPacket(fr.data, isKey: fr.isKey))
+        let ms = UInt32((CMTimeGetSeconds(fr.pts) * 1000).rounded()) + tsOffset
+        flv?.write(.video, ms: ms, body: FLV.videoPacket(fr.data, isKey: fr.isKey))
+        if let r = rtmp {
+            if !sentHeader, let avcC = FLV.avcC(of: fr.format) {
+                r.sendMetadata(FLV.metadata(width: OW, height: OH, fps: fps, videoKbps: Double(es.bitrate) / 1000, audio: false))
+                r.sendVideo(FLV.videoSequenceHeader(avcC: avcC), ms: tsOffset); sentHeader = true
+            }
+            r.sendVideo(FLV.videoPacket(fr.data, isKey: fr.isKey), ms: ms)
+        }
         while !input!.isReadyForMoreMediaData { usleep(1000) }
         input!.append(fr.sampleBuffer()!)
         let k = sizes.count
@@ -107,6 +127,7 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
                 var d = Data(capacity: OW * OH * 4); for y in 0..<OH { d.append(Data(bytes: base + y * bpr, count: OW * 4)) }
                 CVPixelBufferUnlockBaseAddress(ob, .readOnly); stdout.write(d)
             } else {
+                if realtime { let due = t0.addingTimeInterval(Double(i) / fps).timeIntervalSinceNow; if due > 0 { usleep(useconds_t(due * 1_000_000)) } }
                 q.sync { submitted.append(CACurrentMediaTime()) }
                 if let st = steps.first(where: { $0.0 == i }) { enc.setBitrate(st.1); log("bitrate → \(st.1 / 1000) at frame \(i)") }
                 enc.encode(ob, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())), forceKey: i == forceAt)
@@ -117,7 +138,12 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
     }
     if raw { log("raw: \(n) frames"); break }
     enc.flush(); q.sync {}
-    if let f = flv { f.write(.video, ms: UInt32(((Double(sizes.count - 1) / fps) * 1000).rounded()), body: FLV.videoEndOfSequence()); f.close() }
+    if let r = rtmp {
+        r.sendVideo(FLV.videoEndOfSequence(), ms: UInt32(((Double(sizes.count - 1) / fps) * 1000).rounded()) + tsOffset)
+        let closed = DispatchSemaphore(value: 0); r.close { closed.signal() }; _ = closed.wait(timeout: .now() + 30)
+        log("rtmp: sent \(r.bytesSent) bytes, state \(r.state)")
+    }
+    if let f = flv { f.write(.video, ms: UInt32(((Double(sizes.count - 1) / fps) * 1000).rounded()) + tsOffset, body: FLV.videoEndOfSequence()); f.close() }
     let done = DispatchSemaphore(value: 0); input?.markAsFinished(); writer?.finishWriting { done.signal() }; done.wait()
     let secs = Double(sizes.count) / fps, kbps = Double(sizes.reduce(0, +)) * 8 / secs / 1000
     var perSecond: [Double] = []; var j = 0

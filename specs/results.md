@@ -458,6 +458,56 @@ For phone tests, `Documents/debug/rtmp_target.txt` streams to a local server ins
 Not yet run on the phone. The checks are in `docs/run-on-iphone.md`: before/after against a local server, Wi-Fi drops,
 90 minutes, YouTube.
 
+## Own stack, stage 1f on the phone: before/after (2026-10-16, iPhone 15)
+
+**Setup.**
+- The phone streams the test video (match 2) to ffmpeg on the Mac over home Wi-Fi.
+- The Mac firewall blocks ffmpeg, so a relay listens on 1935. It runs on Apple's own python, which the firewall lets
+  through, and forwards to ffmpeg on 127.0.0.1:19350.
+- **Before:** `--streamer haishinkit`. **After:** `--streamer follo`.
+
+**Same length, clean runs (86 s each):**
+
+| | HaishinKit (before) | Follo (after) |
+| --- | --- | --- |
+| Frames | 2148, 24.98 fps | 2162, 24.98 fps |
+| Bitrate | 4511 kbit/s | 4503 kbit/s |
+| Frame intervals > 100 ms (judder) | **541** (timestamps in 0.12/0.2 s steps) | **0** (capture timestamps) |
+| Colour tag | none | BT.709 |
+| Audio | AAC 48 kHz | AAC 48 kHz |
+| Decode errors | 0 | 0 |
+| Phone memory (max) | 582 MB | 634 MB |
+
+**Other runs.**
+- **Two earlier HaishinKit runs** stopped by themselves at about 45–50 s: the server got no frames after a reconnect
+  while the phone showed "live", and the test video reader ended early.
+- **The third HaishinKit run** was clean for 80 s. The earlier failures may partly come from the app going to the
+  background, so they do not count as proof against HaishinKit.
+
+**Follo for 5 minutes.**
+- 7368 frames at 4499 kbit/s, no decode errors.
+- Memory rises while the 180 s drop buffer fills, then stays at 713–727 MB from 3 minutes on. This is not a leak.
+- Thermal state "ok" all the time.
+- The only 1.7 s gap is the test video looping back to its start, not the stream.
+
+**Follo with drops on the phone.** The relay on the Mac is paused for 30 s (a silent drop) and later killed for 15 s
+(a hard drop).
+
+| | Result |
+| --- | --- |
+| Silent drop | Noticed after 4.4 s (no acknowledgement); reconnected 1 s after the network returned, 32.7 s behind live |
+| Hard drop | Noticed at once; reconnect every 2 s, back 1 s after the network returned, 52.6 s behind live |
+| Delivery over 3 connections | Video 0.00–130.80 s: 3266 unique frames, 0 gaps > 0.1 s, 167 duplicates (~3 s per reconnect); audio 0 gaps; 0 decode errors |
+
+A harness bug cost one run: `pkill -f relay.py` also killed the shell loop that restarted ffmpeg. Drops are now done by
+process ID (`phonedrops.sh`).
+
+**Still to do:**
+- a private YouTube broadcast: does it honour the acknowledgement window, and how does it take a re-sent GOP;
+- 90 minutes with Follo;
+- lip-sync with the real camera (a clap);
+- the owner's decision to make Follo the default.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

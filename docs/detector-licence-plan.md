@@ -126,7 +126,7 @@ Hold-out, per project rule: matches 1–3 (today's checklists) and the last 20% 
    - **1c.** Own RTMP client into a local `ffmpeg -listen` server: the received stream must equal what was sent. **Done 2026-10-16** (`results.md`): identical on every run, incl. RTMPS and extended timestamps; YouTube itself still to test.
    - **1d.** Encoded ring buffer and reconnect, through a local proxy that cuts the connection for 10/30/60 s: no frame lost. **Done 2026-10-16** (`results.md`): 0 frames lost in every drop within the ring; ≤ 2 s duplicates; silent drops noticed in ~4 s.
    - **1e.** AAC audio. **Done 2026-10-16** (`results.md`): quality ≥ the reference; audio survives drops like video.
-   - **1f.** App integration behind the switch, default HaishinKit. **Code done 2026-10-16** (builds; tag `before-own-streamer`); phone checks pending (`run-on-iphone.md`).
+   - **1f.** App integration behind the switch, default HaishinKit. **Code done 2026-10-16** (builds; tag `before-own-streamer`); phone before/after done 2026-10-16: equal bitrate, no judder (HaishinKit 541 long frame intervals in 86 s, Follo 0), drops on the phone without lost frames (`results.md`); YouTube, 90 min and lip-sync still to check.
 2. **Detector bench and switch.** `Detector` takes any model with the same outputs; frozen benchmark; the YOLO/FolloNet switch.
 3. **FolloNet-B** (ball): smaller and the quicker win.
 4. **FolloNet-P** (players), with the homography labels from SoccerTrack.

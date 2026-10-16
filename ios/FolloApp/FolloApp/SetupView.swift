@@ -31,6 +31,7 @@ struct SetupView: View {
     @State var thermal = ProcessInfo.processInfo.thermalState
     @State var lastTouch = Date()                                   // пункт 11
     @State var viewer = false
+    @State var muted = false                                         // кнопка «Звук»: тиша в ефірі замість мікрофона
     @State var lastDbg = ""
     // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
     @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -42,18 +43,29 @@ struct SetupView: View {
 
     var body: some View {
         ZStack {
+        VStack(spacing: 0) {
+        // екран прокручується: на малому телефоні прев'ю, табло і кнопки не влазять разом; GO LIVE / СТОП завжди внизу
+        ScrollView {
         VStack(spacing: 12) {
             HStack {
                 if !cam.isRecording { Button { dismiss() } label: { Image(systemName: "chevron.left") } }
                 Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)); Spacer()
             }
             if viewer && cam.isRecording {
-                ViewerView(runner: ls.runner).frame(maxWidth: .infinity).frame(height: 200).clipShape(RoundedRectangle(cornerRadius: 14))
+                ViewerView(runner: ls.runner).frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
                 Text("Так бачить глядач (без затримки YouTube). Не виходь із застосунку: камера зупиниться — дивись трансляцію на іншому телефоні.").font(.caption2).foregroundStyle(.secondary)
             } else {
-                CameraPreview(cam: cam).frame(maxWidth: .infinity).frame(height: 200).clipShape(RoundedRectangle(cornerRadius: 14))
+                CameraPreview(cam: cam).frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            if cam.isRecording { Toggle("Погляд глядача", isOn: $viewer).font(.footnote) }
+            if cam.isRecording {
+                HStack(spacing: 12) {
+                    Toggle("Погляд глядача", isOn: $viewer).font(.footnote)
+                    Button { muted.toggle(); ls.streamer.setMuted(muted) } label: {
+                        Label(muted ? "Звук вимкнено" : "Звук", systemImage: muted ? "mic.slash.fill" : "mic.fill")
+                    }.font(.footnote.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(muted ? Color.red.opacity(0.4) : Color.white.opacity(0.08)).clipShape(Capsule())
+                }
+            }
             HStack {
                 stat(cam.isRecording ? "\(cam.chunkCount)" : "—", "файлів 4K")
                 stat(thermalText, "телефон")
@@ -96,23 +108,25 @@ struct SetupView: View {
                     cam.switchCamera(wide: !cam.useWide); ls.runner.resetPosition()
                 }.font(.footnote)
             }
-            Spacer()
             if let w = ls.warning { Text(w).font(.footnote).foregroundStyle(.yellow) }
             if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
                 Button("Відновити ефір \(s.watchURL.suffix(11))…") { live = LiveTarget(broadcastId: s.broadcastId, rtmpsURL: s.rtmpsURL, streamKey: s.streamKey, watchURL: s.watchURL); go(resume: true) }
                     .font(.footnote)
             }
+        }
+        .padding(16)
+        }
             Button(cam.isRecording ? "■  СТОП (утримуй)" : "●  GO LIVE") { if !cam.isRecording { go() } }
                 .simultaneousGesture(LongPressGesture(minimumDuration: 1).onEnded { _ in if cam.isRecording { stop() } })
                 .disabled(!cam.isRecording && (ls.runner.env == nil || ls.runner.env?.positionProblem != nil))
                 .font(.system(size: 22, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity).padding(16)
                 .background(cam.isRecording ? Color.gray.opacity(0.4) : Color.red).foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 16).padding(.vertical, 8)
         }
-        .padding(16)
         if cam.isRecording { DimOverlay(lastTouch: $lastTouch) }
         }
-        .contentShape(Rectangle()).simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastTouch = Date() })
+        .background(TouchWatcher { if Date().timeIntervalSince(lastTouch) > 1 { lastTouch = Date() } })    // дотик і прокрутка
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
         .sheet(isPresented: $showTeams) { TeamsSheet(score: score) { showTeams = false } }
         .onChange(of: score.state) { _, _ in if startedAt != nil { score.push(to: ls.runner) } }

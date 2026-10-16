@@ -15,6 +15,8 @@ final class Streamer: ObservableObject {
     @Published var droppedSeconds = 0.0
     /// Seconds the stream runs behind live after a network drop (own engine only).
     @Published var delayS = 0.0
+    /// Mute button: silence instead of the microphone in the stream (the 4K recording has no audio anyway).
+    @Published private(set) var muted = false
 
     /// Which stream path runs: HaishinKit (default until the phone tests pass) or our own (stage 1f). Debug builds read
     /// the choice from the setup screen / `--streamer follo|haishinkit`; release builds always use the default.
@@ -48,6 +50,7 @@ final class Streamer: ObservableObject {
         // аудіо з мікрофона: mixer → stream; відео ми подаємо самі через push()
         try? await mixer.attachAudio(AVCaptureDevice.default(for: .audio))
         await mixer.addOutput(stream)
+        if muted { await applyMute() }
         await mixer.startRunning()
         statusTask = Task { [weak self] in
             guard let self else { return }
@@ -129,6 +132,14 @@ final class Streamer: ObservableObject {
     /// Пункт 4: нагрів → 25 fps.
     func setFrameRate(_ f: Double) { fps = f; if follo != nil { return }; Task { try? await stream.setVideoSettings(videoSettings()) } }
 
+    func setMuted(_ m: Bool) {
+        muted = m; DebugLog.log("stream sound \(m ? "off" : "on")")
+        if let f = follo { f.muted = m } else { Task { await applyMute() } }
+    }
+    private func applyMute() async {
+        var s = await mixer.audioMixerSettings; s.isMuted = muted; await mixer.setAudioMixerSettings(s)
+    }
+
     /// Own engine: drop the backlog after a network drop ("Наздогнати ефір", half-time).
     func catchUp() { follo?.catchUp() }
     var diag: String { follo?.diag ?? "" }
@@ -136,7 +147,7 @@ final class Streamer: ObservableObject {
     private func startFollo(url: String, key: String) {
         let f = FolloEngine()
         do { try f.start(url: url, key: key, bitrate: bitrateKbps * 1000, fps: fps) } catch { DebugLog.log("engine follo failed: \(error)"); state = .ended; return }
-        follo = f; state = .connecting
+        follo = f; f.muted = muted; state = .connecting
         folloPoll = Task { [weak self] in                                   // the engine runs on its own queues; mirror its state here
             while let self, !Task.isCancelled, self.state != .ended {
                 self.state = f.isPublishing ? .live : (f.reconnects > 0 ? .reconnecting(attempt: f.reconnects) : .connecting)

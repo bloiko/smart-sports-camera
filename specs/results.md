@@ -568,3 +568,8 @@ Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measu
 | 3 | Chance at 1:25, left goal, no goal (owner) | **No** in v0.2: goal mouth fully in frame only 28% of 1:23–1:26, cut by the left edge. **Yes** in v0.3: 100%, keeper and attack visible | v0.2, v0.3 |
 | 2 | Attacks at 0:13.5 (right), 1:02.3 (right), 2:59.0 (left), found by Claude on zoomed goal areas | v0.2: 2 of 3 (1:02.3 fails, mouth in frame 33%). v0.3: 3 of 3 | v0.2, v0.3 |
 | 2 | Chance at 3:38, left goal, no goal (owner) | **Yes** in both, but in v0.2 the goal is a tiny corner of the frame and a third of the frame is the logo on the near grass; v0.3 shows goal, keeper and players large (frames compared 3:35–3:41) | v0.2, v0.3 |
+
+## Private YouTube broadcast on the own stream (2026-10-16)
+
+- m2 test video from the iPhone 15 with `--streamer follo` to `rtmps://a.rtmps.youtube.com/live2` (Studio stream key): YouTube answered `NetStream.Publish.Start` on the first connection; 200 s with encoder in = out, 0 drops, 0 errors, nothing in flight (YouTube acknowledges everything), memory ~760 MB, thermal ok.
+- Restarted twice (relaunch, new build): publishes again within 1 s of GO LIVE.

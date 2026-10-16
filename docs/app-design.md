@@ -25,6 +25,13 @@ Interactive mockup of all screens: https://claude.ai/artifact/YaX8ooupu273H2BhSc
 
 In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position check inside the setup screen), 6, 7, 7b, 7c (viewer view), 8, 9 (play and share per clip; no "not a goal" button yet). Missing: 10 settings.
 
+## Live screen controls (2026-10-16)
+
+- The setup/live screen scrolls; GO LIVE / STOP stays pinned at the bottom (on the phone the preview, scoreboard and buttons did not fit together).
+- Previews keep 16:9 so the whole viewer frame is visible.
+- "Звук" button next to "Погляд глядача": mutes the stream (silence replaces the microphone; the audio track keeps running, YouTube expects it). Works on both engines. The 4K recording has no audio.
+- Touches for the 60 s dimming are counted by a window-level recognizer that never takes touches away from scrolling.
+
 ## Scoreboard (2026-10-15, design chosen 2026-10-16)
 
 The stream shows a TV-style score bug in the top left corner of the 1080p picture. Owner's choice among three proposals (`follosim scoreboards DIR` renders them all): a red clock block on the left with the half ("2Т 67:42"), then the full club names with a colour stripe each and the score in a white box. Added time appears as a white "+3" tab under the clock; while the clock is paused the block says "ПЕРЕРВА"; after a "+" a banner "ГОЛ! <club>" in the team colour shows for 6 s under the bug. Red cards (2026-10-16): a small red-card button per team on the live screen (− removes a wrong one), up to 5 cards; on the bug small cards over the club name (`RedCardStyle.above`, chosen by the owner 2026-10-16; `tab`, `count`, `beside` kept for comparison) and a red banner "ЧЕРВОНА КАРТКА <club>" for 6 s. Code: `FolloCore/ScoreboardStyles.swift` (`ScoreStyle.classic`, `fullNames`), app `ScoreViews.swift`.

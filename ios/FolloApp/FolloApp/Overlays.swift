@@ -16,6 +16,29 @@ struct DimOverlay: View {
     }
 }
 
+/// Any touch on the screen (tap or scroll) counts as activity for `DimOverlay`. A window-level recognizer that never takes
+/// touches away from the buttons or the scroll view (a SwiftUI DragGesture on the screen can block scrolling).
+struct TouchWatcher: UIViewRepresentable {
+    let onTouch: () -> Void
+    func makeUIView(context: Context) -> WatcherView { let v = WatcherView(); v.onTouch = onTouch; v.isUserInteractionEnabled = false; return v }
+    func updateUIView(_ v: WatcherView, context: Context) { v.onTouch = onTouch }
+
+    final class WatcherView: UIView, UIGestureRecognizerDelegate {
+        var onTouch: (() -> Void)?
+        private var rec: UILongPressGestureRecognizer?
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let r = rec { r.view?.removeGestureRecognizer(r); rec = nil }
+            guard let w = window else { return }
+            let r = UILongPressGestureRecognizer(target: self, action: #selector(touched)); r.minimumPressDuration = 0
+            r.cancelsTouchesInView = false; r.delaysTouchesBegan = false; r.delaysTouchesEnded = false; r.delegate = self
+            w.addGestureRecognizer(r); rec = r
+        }
+        @objc private func touched() { onTouch?() }
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
+}
+
 /// Пункт 10: «погляд глядача» — кадр 1920×1080 після віртуальної камери, те, що бачить YouTube (без його затримки).
 final class PixelBufferView: UIView {
     override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }

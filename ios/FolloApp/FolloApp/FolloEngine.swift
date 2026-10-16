@@ -18,6 +18,8 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
     var isPublishing: Bool { streamer?.isPublishing ?? false }
     var reconnects: Int { streamer?.reconnects ?? 0 }
     var delayS: Double { streamer?.delayS ?? 0 }
+    /// Mute button: the microphone is replaced by silence; the audio track keeps running (YouTube expects it).
+    var muted = false
 
     func start(url: String, key: String, bitrate: Int, fps: Double) throws {
         var vs = VideoEncoder.Settings(); vs.bitrate = bitrate; vs.fps = fps
@@ -101,11 +103,14 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
                 self.interleaver.audio(ms: Int64(((host + off - t0) * 1000).rounded()), body: FLV.audioPacket(d)); self.audioPackets += 1
             }
         }
-        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { buf, when in
+        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak self] buf, when in
             if firstSampleHost == nil { firstSampleHost = AVAudioTime.seconds(forHostTime: when.hostTime) }
             guard let out = AVAudioPCMBuffer(pcmFormat: enc.inputFormat, frameCapacity: buf.frameLength) else { return }
             var given = false
             conv.convert(to: out, error: nil) { _, st in if given { st.pointee = .noDataNow; return nil }; given = true; st.pointee = .haveData; return buf }
+            if self?.muted == true, let ch = out.floatChannelData {
+                for c in 0..<Int(out.format.channelCount) { ch[c].update(repeating: 0, count: Int(out.frameLength)) }
+            }
             enc.append(out)
         }
         try mic.start()

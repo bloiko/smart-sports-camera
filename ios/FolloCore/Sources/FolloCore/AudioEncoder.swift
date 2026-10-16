@@ -4,7 +4,7 @@ import AVFoundation
 /// Own AAC-LC encoder on AVAudioConverter (system framework) for the live stream (stage 1e): PCM from the microphone in,
 /// raw AAC packets (1024 samples each) out, with the AudioSpecificConfig for the stream header. Replaces the audio path
 /// inside HaishinKit.
-public final class AudioEncoder {
+public final class AudioEncoder: @unchecked Sendable {
     public struct Settings: Equatable {
         public var sampleRate = 48_000.0, channels = 1, bitrate = 128_000
         public init() {}

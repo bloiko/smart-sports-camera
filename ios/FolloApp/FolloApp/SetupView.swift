@@ -76,6 +76,17 @@ struct SetupView: View {
                     ForEach(CameraSession.testVideos, id: \.self) { Text("Відео \($0.deletingPathExtension().lastPathComponent)").tag(URL?.some($0)) }
                 }.pickerStyle(.segmented)
             }
+            #if DEBUG
+            if !cam.isRecording {                                             // debug: which stream path (rollback switch, stage 1f)
+                Picker("Стрім", selection: Binding(get: { Streamer.engine.rawValue }, set: { UserDefaults.standard.set($0, forKey: "debug.streamer") })) {
+                    Text("Стрім: HaishinKit").tag("haishinkit"); Text("Стрім: Follo").tag("follo")
+                }.pickerStyle(.segmented)
+            }
+            #endif
+            if cam.isRecording, ls.streamer.delayS > 5 {                      // own engine after a network drop
+                HStack { Text("Ефір відстає на \(Int(ls.streamer.delayS)) с").font(.footnote); Spacer(); Button("Наздогнати ефір") { ls.streamer.catchUp() }.font(.footnote) }
+                    .padding(8).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 8))
+            }
             if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
             if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
             if !cam.isRecording, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
@@ -109,6 +120,7 @@ struct SetupView: View {
             // debug: --video NAME з Mac або останній вибір у перемикачі
             if let i = CommandLine.arguments.firstIndex(of: "--video"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.testVideo") }
             if CommandLine.arguments.contains("--camera") { UserDefaults.standard.removeObject(forKey: "debug.testVideo") }
+            if let i = CommandLine.arguments.firstIndex(of: "--streamer"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.streamer") }
             if let n = UserDefaults.standard.string(forKey: "debug.testVideo") { cam.testVideo = CameraSession.testVideos.first { $0.lastPathComponent == n } }
             cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
             ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
@@ -147,6 +159,10 @@ struct SetupView: View {
                 // TODO: токен з Google Sign-In; поки що — з Info.plist ключ YT_TOKEN для тесту
                 let token = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""
                 if !resume, !token.isEmpty { live = try await YouTubeLive.createBroadcast(token: token, title: "Follo \(Date().formatted(date: .abbreviated, time: .shortened))") }
+                else if !resume, let t = YouTubeLive.debugTarget() {                        // debug: свій RTMP-сервер (ffmpeg на Mac)
+                    live = LiveTarget(broadcastId: "", rtmpsURL: t.url, streamKey: t.key, watchURL: t.url)
+                    DebugLog.log("stream target: \(t.url) (debug), engine \(Streamer.engine.rawValue)")
+                }
                 else if !resume, token.isEmpty, let k = YouTubeLive.debugStreamKey() {      // debug: ключ з YouTube Studio
                     live = LiveTarget(broadcastId: "", rtmpsURL: YouTubeLive.studioIngest, streamKey: k, watchURL: "https://studio.youtube.com")
                     DebugLog.log("YouTube: Studio stream key")

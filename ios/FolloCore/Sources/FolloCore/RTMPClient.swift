@@ -5,7 +5,7 @@ import Network
 /// protocol control messages a server sends (chunk size, window acknowledgement, peer bandwidth, ping). Payloads come from
 /// `FLV` (the same bodies as FLV tags). Replaces HaishinKit's RTMP layer (stage 1c of docs/detector-licence-plan.md).
 /// All work happens on one serial queue; callbacks arrive on it too.
-public final class RTMPClient {
+public final class RTMPClient: @unchecked Sendable {      // all state on `queue`
     public enum State: Equatable { case idle, connecting, publishing, failed(String), closed }
     public private(set) var state: State = .idle { didSet { if state != oldValue { onState?(state) } } }
     public var onState: ((State) -> Void)?
@@ -84,7 +84,7 @@ public final class RTMPClient {
     private func newTag() -> Int { tagLock.lock(); defer { tagLock.unlock() }; tagCounter += 1; return tagCounter }
 
     /// Polite end: FCUnpublish, deleteStream, then close the socket once everything queued has been sent.
-    public func close(then done: (() -> Void)? = nil) {
+    public func close(then done: (@Sendable () -> Void)? = nil) {
         queue.async { [self] in
             guard let c = conn else { done?(); return }
             if state == .publishing {

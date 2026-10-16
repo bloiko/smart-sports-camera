@@ -253,6 +253,24 @@ case "aacenc":   // follosim aacenc VIDEO OUT.flv [--from S] [--seconds N] [--bi
     flv.close()
     let kbps = Double(sizes.reduce(0, +)) * 8 / (Double(frames) / aset.sampleRate) / 1000
     log("audio \(Int(aset.sampleRate)) Hz × \(aset.channels): \(frames) samples in, \(ae.packets) AAC packets out, \(Int(kbps)) kbit/s, ASC \(ae.audioSpecificConfig.map { String(format: "%02x", $0) }.joined()) → \(args[3])")
+case "interleave":   // follosim interleave — stage 1f: audio arriving 2 s before its video still leaves as one time-ordered stream
+    var il = MediaInterleaver(); var out: [(Int64, Bool)] = []; var audioIn = 0
+    let fps = 30.0, sr = 48_000.0, seconds = 60.0
+    var nextAudio = 0                                                  // audio packet k covers 1024 samples
+    for f in 0..<Int(seconds * fps) {
+        let videoMs = Int64((Double(f) / fps * 1000).rounded())
+        let wall = Double(f) / fps + 2.0                               // the frame leaves the virtual camera 2 s after capture
+        while Double(nextAudio) * 1024 / sr <= wall {                  // all audio captured up to now has arrived
+            il.audio(ms: Int64((Double(nextAudio) * 1024 / sr * 1000).rounded()) - Int64(Int.random(in: 0...1) * 0), body: Data([0])); audioIn += 1; nextAudio += 1
+        }
+        for o in il.video(ms: videoMs, body: Data([1]), isKey: f % 60 == 0) {
+            switch o { case .audio(let ms, _): out.append((ms, true)); case .video(let ms, _, _): out.append((ms, false)) }
+        }
+    }
+    let ordered = zip(out, out.dropFirst()).allSatisfy { $0.0 <= $1.0 }
+    let audioOut = out.filter { $0.1 }.count, videoOut = out.filter { !$0.1 }.count
+    let maxLead = out.filter { $0.1 }.map { a in a.0 }.max() ?? 0
+    print("interleaver: video \(videoOut)/\(Int(seconds * fps)), audio out \(audioOut) of \(audioIn) in (rest wait for later video: \(audioIn - audioOut - il.droppedAudio)), dropped \(il.droppedAudio); time-ordered \(ordered); last audio \(maxLead) ms ≤ last video \(out.last { !$0.1 }!.0) ms")
 case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [

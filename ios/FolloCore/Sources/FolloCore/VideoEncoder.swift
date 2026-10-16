@@ -7,7 +7,7 @@ import VideoToolbox
 /// gives us the encoded frames themselves (for the network-drop buffer and our own RTMP client).
 /// No B-frames (decode order = presentation order: simple RTMP timestamps), a keyframe every `keyIntervalS`,
 /// average bitrate with a hard cap of `peakFactor` × bitrate over one second.
-public final class VideoEncoder {
+public final class VideoEncoder: @unchecked Sendable {     // VideoToolbox calls back on its own thread
     public struct Settings: Equatable {
         public var width = 1920, height = 1080, bitrate = 4_500_000, fps = 30.0, keyIntervalS = 2.0, peakFactor = 1.5
         public init() {}

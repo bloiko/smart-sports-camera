@@ -61,6 +61,7 @@ Status of the 21 edge-case items lives in `docs/live-edge-cases.md`. Done in cod
 Needs the owner: Xcode install and first run (`docs/run-on-iphone.md`), own iPhone footage, Google Cloud project for YouTube (`docs/youtube-live.md`).
 
 ### 4. Everything own in the product (owner, 2026-10-16)
+- **Progress 2026-10-16:** stage 1 (own streaming) 1a–1e done and tested on the Mac, 1f in the app behind a switch (default HaishinKit); next: phone checks of 1f when the owner has the phone, then stage 2 (detector bench).
 - Rule: no third-party code or model weights in the app. Replace the YOLO models with own FolloNet-P / FolloNet-B (trained from scratch on SoccerTrack v2 + owner footage, labels from projected human annotations and a temporary teacher), HaishinKit with an own RTMP(S) client + VideoToolbox encoder (also the 60 s buffer), the planned Google Sign-In SDK with own OAuth. Plan, criteria, phases: `docs/detector-licence-plan.md` (~5–6 weeks; does not block test matches).
 
 ## P1: next

@@ -13,6 +13,21 @@ final class Streamer: ObservableObject {
     @Published var state: State = .idle
     @Published var bitrateKbps = 4500
     @Published var droppedSeconds = 0.0
+    /// Seconds the stream runs behind live after a network drop (own engine only).
+    @Published var delayS = 0.0
+
+    /// Which stream path runs: HaishinKit (default until the phone tests pass) or our own (stage 1f). Debug builds read
+    /// the choice from the setup screen / `--streamer follo|haishinkit`; release builds always use the default.
+    enum Engine: String { case haishinkit, follo }
+    static var engine: Engine {
+        #if DEBUG
+        return Engine(rawValue: UserDefaults.standard.string(forKey: "debug.streamer") ?? "") ?? .haishinkit
+        #else
+        return .haishinkit
+        #endif
+    }
+    private var follo: FolloEngine?
+    private var folloPoll: Task<Void, Never>?
 
     private let conn = RTMPConnection()
     private lazy var stream = RTMPStream(connection: conn)
@@ -26,6 +41,7 @@ final class Streamer: ObservableObject {
     private let bitrateSteps = [4500, 3000, 2000]        // кбіт/с; 2000 → 720p
 
     func start(url: String, key: String) async {
+        if Self.engine == .follo { startFollo(url: url, key: key); return }
         self.url = url; self.key = key
         try? await stream.setVideoSettings(videoSettings())
         try? await stream.setAudioSettings(AudioCodecSettings(bitRate: 128_000))
@@ -84,6 +100,7 @@ final class Streamer: ObservableObject {
 
     /// Пункт 2: буфер кадрів до 60 с на час обриву.
     func push(_ pixelBuffer: CVPixelBuffer, at time: CMTime) {
+        if let f = follo { f.push(pixelBuffer, at: time); return }
         if state == .live {
             let sb = CMSampleBuffer.from(pixelBuffer, time: time)
             Task { await stream.append(sb) }
@@ -104,14 +121,32 @@ final class Streamer: ObservableObject {
     func stepBitrateDown() async {
         if let i = bitrateSteps.firstIndex(of: bitrateKbps), i + 1 < bitrateSteps.count {
             bitrateKbps = bitrateSteps[i + 1]
+            if let f = follo { f.setBitrate(bitrateKbps * 1000); return }      // own encoder: 1080p at every step (results.md, 1a)
             try? await stream.setVideoSettings(videoSettings())
         }
     }
 
     /// Пункт 4: нагрів → 25 fps.
-    func setFrameRate(_ f: Double) { fps = f; Task { try? await stream.setVideoSettings(videoSettings()) } }
+    func setFrameRate(_ f: Double) { fps = f; if follo != nil { return }; Task { try? await stream.setVideoSettings(videoSettings()) } }
+
+    /// Own engine: drop the backlog after a network drop ("Наздогнати ефір", half-time).
+    func catchUp() { follo?.catchUp() }
+
+    private func startFollo(url: String, key: String) {
+        let f = FolloEngine()
+        do { try f.start(url: url, key: key, bitrate: bitrateKbps * 1000, fps: fps) } catch { DebugLog.log("engine follo failed: \(error)"); state = .ended; return }
+        follo = f; state = .connecting
+        folloPoll = Task { [weak self] in                                   // the engine runs on its own queues; mirror its state here
+            while let self, !Task.isCancelled, self.state != .ended {
+                self.state = f.isPublishing ? .live : (f.reconnects > 0 ? .reconnecting(attempt: f.reconnects) : .connecting)
+                self.delayS = f.delayS
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
 
     func stop() {
+        if let f = follo { state = .ended; folloPoll?.cancel(); f.stop(); follo = nil; return }
         state = .ended; reconnectTask?.cancel(); statusTask?.cancel()
         Task { _ = try? await stream.close(); try? await conn.close(); await mixer.stopRunning() }
     }

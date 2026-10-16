@@ -5,7 +5,7 @@ import Foundation
 /// `stallS`), it reconnects every `reconnectS` and resends from the last keyframe that was surely sent, so viewers miss
 /// nothing; the stream then runs behind live by the length of the drop ("delay line"). `catchUp` > 1 sends the backlog
 /// faster than real time (only if the uplink allows); `jumpToLive()` drops the backlog (half-time, owner's button).
-public final class FolloStreamer {
+public final class FolloStreamer: @unchecked Sendable {   // all state on `queue`
     public struct Config {
         public var capacityS = 180.0, catchUp = 1.0, reconnectS = 2.0, stallS = 5.0, maxInFlightBytes = 2_000_000
         /// With server acknowledgements: no new acknowledgement for this long while more than 2 windows are unacknowledged
@@ -73,7 +73,7 @@ public final class FolloStreamer {
     }
 
     /// Send what is left (up to `drainS`), then close politely.
-    public func stop(drainS: Double = 30, then done: @escaping () -> Void) {
+    public func stop(drainS: Double = 30, then done: @escaping @Sendable () -> Void) {
         queue.async { [self] in
             let deadline = Date().addingTimeInterval(drainS)
             func check() {

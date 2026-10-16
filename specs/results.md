@@ -438,6 +438,26 @@ the same audio.
 Audio leads video by the AAC encoder delay (2112 samples, 44 ms at 48 kHz), the same as ffmpeg. Lip-sync on the phone
 uses the capture timestamps of the camera and the microphone, so it is checked in stage 1f on the device.
 
+## Own stack, stage 1f: in the app behind a switch (2026-10-16, Mac build)
+
+`Streamer` keeps HaishinKit as the default and gains `Streamer.engine`. A debug build switches it from the setup screen or
+`--streamer follo|haishinkit`; release builds always use HaishinKit. `FolloEngine` (app) holds three parts:
+- the encoders;
+- the microphone (AVAudioEngine) with lip-sync: camera frames carry host-clock capture times, the same clock as the microphone;
+- `MediaInterleaver` (FolloCore): audio waits until the 2 s-delayed video reaches its time.
+
+The live screen shows "Ефір відстає на N с" and a "Наздогнати ефір" button when the stream runs behind after a drop.
+For phone tests, `Documents/debug/rtmp_target.txt` streams to a local server instead of YouTube.
+
+| Check (Mac) | Result |
+| --- | --- |
+| `follosim interleave` (60 s, audio 2 s ahead of video) | 1800/1800 video, 2811 audio out, 94 waiting for later video (the last 2 s), 0 dropped, strictly time-ordered |
+| iOS build Debug and Release (`generic/platform=iOS`) | Succeeded. Swift 6 concurrency: the new classes run on their own serial queues, marked `@unchecked Sendable` |
+| Rollback | Tag `before-own-streamer`, debug switch, release default HaishinKit |
+
+Not yet run on the phone. The checks are in `docs/run-on-iphone.md`: before/after against a local server, Wi-Fi drops,
+90 minutes, YouTube.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

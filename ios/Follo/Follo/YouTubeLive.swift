@@ -43,6 +43,18 @@ enum YouTubeLive {
     }
     static let studioIngest = "rtmps://a.rtmps.youtube.com:443/live2"
 
+    /// Debug: stream to any RTMP server instead of YouTube, e.g. ffmpeg on the Mac in the same Wi-Fi
+    /// (Documents/debug/rtmp_target.txt: "rtmp://192.168.1.20:1935/live test"). Release builds ignore the file.
+    static func debugTarget() -> (url: String, key: String)? {
+        #if DEBUG
+        let u = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("debug/rtmp_target.txt")
+        let p = ((try? String(contentsOf: u, encoding: .utf8)) ?? "").split(whereSeparator: { $0 == " " || $0 == "\n" }).map(String.init)
+        return p.count >= 2 ? (p[0], p[1]) : nil
+        #else
+        return nil
+        #endif
+    }
+
     static func complete(token: String, broadcastId: String) async {
         _ = try? await post(token, "liveBroadcasts/transition?part=id&id=\(broadcastId)&broadcastStatus=complete", [:])
     }

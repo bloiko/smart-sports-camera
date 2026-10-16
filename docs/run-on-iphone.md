@@ -62,6 +62,42 @@ xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer --
 
 GO LIVE then streams to `rtmps://a.rtmps.youtube.com:443/live2` with that key; the log shows `stream live` every 10 s. Release builds ignore the file.
 
+## Own stream engine: phone checks (stage 1f, before/after)
+
+The app has two stream paths. The default is HaishinKit, as before. The new one is Follo: our encoders, our RTMP client
+and the 3-minute drop buffer. Choose the path in a debug build:
+- on the setup screen, with "Стрім: HaishinKit / Follo";
+- or from the Mac, with `--streamer follo` or `--streamer haishinkit` (the choice is remembered).
+
+Release builds always use HaishinKit until these checks pass. Rollback: flip the switch, or
+`git checkout before-own-streamer`.
+
+1. Mac and phone on the same Wi-Fi. On the Mac, record what arrives; it restarts after each connection:
+
+```bash
+while true; do ffmpeg -v error -copyts -listen 1 -i rtmp://0.0.0.0:1935/live/test -c copy -f flv recv_$(date +%H%M%S).flv; done
+```
+
+2. Tell the phone where to stream. `MAC_IP` is the Mac's Wi-Fi address:
+
+```bash
+echo "rtmp://MAC_IP:1935/live test" > /tmp/rtmp_target.txt
+```
+
+```bash
+xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer --domain-identifier com.bohdanloiko.follo --source /tmp/rtmp_target.txt --destination Documents/debug/rtmp_target.txt
+```
+
+3. **Before:** run the test video with `--streamer haishinkit --golive` for 3 minutes. **After:** the same with
+   `--streamer follo`. Compare the two recordings: frame rate, bitrate, colours (BT.709 tag), picture, and lip-sync (clap
+   in front of the camera, with the camera instead of the test video).
+4. **Drops (Follo only):** during the stream, turn the phone's Wi-Fi off for 10, 30 and 60 s. Then check the log:
+   - the stream continues behind live;
+   - "Наздогнати ефір" appears and works;
+   - `python src/stream_check.py` shows no missing frames. It needs the phone's sent stream; for that, use
+     `follosim stream` on the Mac as in `results.md`.
+5. **90 minutes with Follo:** memory, heat and battery. Then a private YouTube broadcast.
+
 ## Testing at home without a pitch
 
 `python src/bench_play.py work/m2/game.mp4 --loop` plays the match full screen on the Mac, cropped to the pitch and stretched to fill the screen (`--keep` keeps the aspect ratio; the panorama is ~3.8:1, so unstretched it is a thin strip). Put the phone 25–35 cm from the screen, landscape, so the screen fills about 80% of the ultra-wide frame; Mac brightness at maximum. The app then sees grass, lines and players as on a real pitch: position check, goals, goal mode, streaming and highlights all run for real. This is a development bench only; nothing in the app depends on it.

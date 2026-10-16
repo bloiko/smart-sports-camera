@@ -97,6 +97,26 @@ Hold-out, per project rule: matches 1–3 (today's checklists) and the last 20% 
 - **Mac first.** Everything is tested on the Mac (`follosim`, local servers, recorded matches); the phone checks come
   later, in a batch, when the owner has the phone.
 
+## Rollback plan
+
+- **Steps 1a–1e** only add new files to `FolloCore` and new `follosim` commands. The app does not use them, so rolling
+  back means doing nothing: the phone keeps streaming through HaishinKit.
+- **Step 1f** (app integration):
+  - Before it, a git tag `before-own-streamer` marks the last commit with the old path only.
+  - The new `FolloStreamer` sits behind a switch, `Streamer.engine = .haishinkit | .follo`. The default stays
+    `.haishinkit` until the phone tests pass.
+  - A debug toggle on the setup screen and a launch argument (`--streamer follo|haishinkit`) flip it without a rebuild.
+- **If something goes wrong on the phone:**
+  1. Flip the switch back. It takes one tap, and nothing else changes.
+  2. If the build itself is broken, `git checkout before-own-streamer` and rebuild.
+- **HaishinKit is removed** only after the new path has passed:
+  - every Mac test;
+  - the phone tests: local RTMP server, drops of 10, 30 and 60 s, a 90-minute run, and a private YouTube broadcast.
+  - The removal is its own commit, so `git revert` brings it back.
+- **The same rules hold for the detectors.** The model set is switchable: YOLO, the current one, or FolloNet. The YOLO
+  models stay in the bundle until FolloNet meets every acceptance criterion, and they are removed in a separate,
+  revertible commit.
+
 ## Stages in order of importance
 
 1. **Own streaming core** (replaces HaishinKit, gives the 60 s buffer). Steps, each tested on the Mac before the next:

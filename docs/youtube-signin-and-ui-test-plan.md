@@ -139,7 +139,7 @@ detector is compared with the current one on the same checklists before it repla
 | Stage | Needs the owner | Status |
 | --- | --- | --- |
 | 0 UI tests on the simulator | no | done 2026-10-16 (see results below) |
-| 1 Google sign-in, unlisted, stable link | 15 min setup + one sign-in on the phone | planned |
+| 1 Google sign-in, unlisted, stable link | 15 min setup + one sign-in on the phone | code and Mac/simulator tests done 2026-10-17; phone test next |
 | 2 Drops and background | 1 Wi-Fi test | planned |
 | 3 Camera quality | footage from the stadium | planned |
 | 4 Own detectors | no | planned |
@@ -169,3 +169,37 @@ detector is compared with the current one on the same checklists before it repla
   unreachable STOP. The fix itself, STOP as a hold-only control, does not depend on that.
 - CPU: the simulator runs Core ML on the Mac's CPU, and the live simulator panel streams video. The script shuts the
   simulator down at the end, and the panel stays closed during runs.
+
+## Stage 1 results so far (2026-10-17)
+
+- Code:
+  - `FolloCore/GoogleAuth.swift`: PKCE, code exchange, refresh, "sign in again" on `invalid_grant`.
+  - `FolloCore/YouTubeAPI.swift`:
+    - reusable stream;
+    - unlisted broadcast with auto stop off;
+    - reuse after a restart;
+    - visibility switch, with public refused unless `allowPublic`;
+    - complete.
+  - App: `YouTubeAccount.swift` (system web sheet, Keychain) and the setup screen (sign-in row, visibility picker in
+    test builds, link with Copy/Share, visibility row during the match).
+  - The old `YT_TOKEN` path is removed. The Studio key and own RTMP target stay as debug fallbacks.
+- **Mac:** `follosim youtube` against `src/fake_youtube.py` passes all 17 checks.
+- **Simulator:** `test3_YouTubeUnlistedSameLink` passes:
+  - signed in;
+  - unlisted by default, and no public option exists;
+  - private ⇄ unlisted;
+  - the app is killed mid-match and GO LIVE gives the same link;
+  - STOP ends the broadcast;
+  - exactly one broadcast insert;
+  - `public` is never sent;
+  - `enableAutoStop: false`.
+- **Bugs the tests found:**
+  - Sign-in was lost on every launch: `didSet` does not run inside the class's own `init`.
+  - The simulator's microphone aborts the app (AURemoteIO RPC timeout), so the simulator streams without the mic.
+  - A broadcast left by a crash would stay "live" forever with auto stop off. It is now closed when a new match starts
+    more than 3 h later.
+- **Next, on the phone:**
+  - the owner signs in once;
+  - GO LIVE → check the youtu.be link on another phone (unlisted);
+  - kill the app → GO LIVE → same link;
+  - STOP → the broadcast ends in Studio.

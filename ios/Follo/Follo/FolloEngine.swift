@@ -31,7 +31,12 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
         }
         v.onFrame = { [weak self] f in self?.q.async { self?.videoOut(f) } }
         let s = FolloStreamer(url: url, key: key); s.log = { DebugLog.log("streamer: " + $0) }; streamer = s; s.start()
+        #if targetEnvironment(simulator)
+        // the simulator's audio service times out in AURemoteIO::Initialize and aborts the app (UI tests, 2026-10-17)
+        DebugLog.log("mic: simulator — stream without audio")
+        #else
         do { try startMic() } catch { DebugLog.log("mic: \(error.localizedDescription) — stream without audio") }
+        #endif
         DebugLog.log("engine follo: \(bitrate / 1000) kbit/s, audio \(audio != nil)")
     }
 

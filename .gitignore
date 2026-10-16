@@ -26,3 +26,4 @@ ios/**/xcuserdata/
 ios/FolloApp/FolloApp/*.mlpackage
 ios/FolloCore/.build-mac/
 .DS_Store
+ios/FolloApp/FolloApp/google_client_id.txt

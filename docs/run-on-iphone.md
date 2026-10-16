@@ -8,7 +8,7 @@ Takes about 30 minutes the first time, 1 minute afterwards. Works with a normal 
 2. **Apple ID in Xcode**: Xcode → Settings → Accounts → **+** → Apple ID → sign in. Your "Personal Team" appears.
 3. **Open the project**: `ios/FolloApp/FolloApp.xcodeproj` (already wired: sources, FolloCore package, HaishinKit, Core ML models, camera/microphone usage strings). Package resolution on first open takes a minute.
 4. **Signing**: project → target FolloApp → Signing & Capabilities → Team = your Personal Team. Bundle Identifier is `com.bohdanloiko.follo`; change it if Xcode says it is taken.
-5. Optional for the YouTube test: target → Info → add `YT_TOKEN` = the `token` field from `secrets/token.json` (made by `python src/golive.py`; valid 1 hour).
+5. YouTube sign-in: `cp secrets/google_client_id.txt ios/FolloApp/FolloApp/` before building (git-ignored; the OAuth client of type iOS from Google Cloud). Without it the app hides "Увійти в YouTube" and only the debug paths below work.
 6. **iPhone**: Settings → Privacy & Security → Developer Mode → on (the phone restarts). Connect with a cable, tap "Trust".
 
 Command-line check without a phone: `cd ios/FolloApp && xcodebuild -scheme FolloApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
@@ -49,6 +49,19 @@ xcrun devicectl device process launch --terminate-existing --device <UDID> com.b
 - `--video NAME` picks the file (remembered); `--camera` goes back to the camera. On the phone: the Камера / Відео switch on the setup screen.
 - `--golive` presses GO LIVE once the position check passes (no YouTube token in debug builds: recording and virtual camera only).
 - The log (`Documents/debug/log.txt`) prints every 10 s: frames in/out, ball share, goals known, thermal state, memory.
+
+## YouTube with own Google sign-in (stage 1 of docs/youtube-signin-and-ui-test-plan.md)
+
+1. On the setup screen: "Увійти в YouTube (Google)". The system sign-in sheet opens; the owner signs in and allows
+   YouTube access. Google shows "app not verified" while the project is in Testing: Continue.
+2. The row shows the channel name. Test builds offer "Приватне" / "Не для всіх" (default); there is no public option.
+3. GO LIVE creates an unlisted broadcast and shows its youtu.be link with Copy and Share.
+4. During the match: "Зробити приватним" / "Зробити «Не для всіх»" (test build); release builds offer "Для всіх" with a
+   confirmation.
+5. If the app is killed mid-match, GO LIVE continues the same broadcast (same link). STOP ends it on YouTube.
+6. The sign-in lasts 7 days while the Google project is in Testing; then sign in again.
+
+Rollback: sign out ("Вийти"); the Studio key below works as before.
 
 ## Private YouTube test without Google Cloud (debug builds only)
 

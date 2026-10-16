@@ -83,4 +83,75 @@ final class FolloUITests: XCTestCase {
         wait("match deleted", timeout: 5) { cells.count == before - 1 }
         shot("11 match deleted")
     }
+
+    // ---------------------------------------------------------------- YouTube (src/fake_youtube.py on 127.0.0.1:8765)
+
+    let fake = "http://127.0.0.1:8765"
+    func fakeLog() -> [[String: Any]] {
+        let d = try? Data(contentsOf: URL(string: fake + "/_log")!)
+        return (d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: Any]] }) ?? []
+    }
+    func relaunchWithFakeYouTube() {
+        app.terminate()
+        app.launchArguments = ["--autostart", "--video", "m2.mp4", "--streamer", "follo", "--youtube-api", fake]
+        app.launch()
+    }
+    func goLiveWhenReady() {
+        let go = app.buttons["goLive"]
+        wait("pitch found", timeout: 300) { go.exists && go.isEnabled }
+        go.tap()
+        wait("LIVE", timeout: 30) { self.title == "LIVE" }
+    }
+
+    /// Stage 1: broadcasts start unlisted with a link; a debug build cannot go public; visibility switches during the
+    /// match; a restart of the app mid-match keeps the same broadcast (same link); STOP ends it.
+    func test3_YouTubeUnlistedSameLink() throws {
+        var r = URLRequest(url: URL(string: fake + "/_reset")!); r.httpMethod = "POST"
+        _ = try? Data(contentsOf: URL(string: fake + "/_log")!)                      // server is up?
+        let sem = DispatchSemaphore(value: 0); URLSession.shared.dataTask(with: r) { _, _, _ in sem.signal() }.resume(); sem.wait()
+        relaunchWithFakeYouTube()
+
+        XCTAssertTrue(app.staticTexts["YouTube: Test channel"].waitForExistence(timeout: 15), "signed in, channel shown")
+        let picker = app.segmentedControls["privacyPicker"]
+        XCTAssertTrue(picker.exists)
+        XCTAssertTrue(picker.buttons["Не для всіх"].isSelected, "default: unlisted")
+        XCTAssertFalse(app.buttons["Для всіх"].exists, "a test build offers no public option")
+        shot("20 signed in, unlisted")
+
+        goLiveWhenReady()
+        let link = app.staticTexts["watchURL"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        let url1 = link.label
+        XCTAssertTrue(url1.hasPrefix("https://youtu.be/"), url1)
+        XCTAssertEqual(app.staticTexts["privacy"].label, "Не для всіх")
+        shot("21 live unlisted with link")
+        app.buttons["Зробити приватним"].tap()
+        wait("private", timeout: 10) { self.app.staticTexts["privacy"].label == "Приватне" }
+        app.buttons["Зробити «Не для всіх»"].tap()
+        wait("unlisted again", timeout: 10) { self.app.staticTexts["privacy"].label == "Не для всіх" }
+        XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label CONTAINS 'Для всіх»…'")).firstMatch.exists, "no public switch in a test build")
+
+        // the app is killed mid-match (crash, iOS, owner): GO LIVE again must continue the same broadcast
+        relaunchWithFakeYouTube()
+        goLiveWhenReady()
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        XCTAssertEqual(link.label, url1, "same link after a restart")
+        shot("22 after restart, same link")
+
+        app.descendants(matching: .any)["stop"].press(forDuration: 1.5)
+        let done = app.buttons["resultDone"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10)); done.tap()
+
+        let id = String(url1.dropFirst("https://youtu.be/".count))
+        wait("broadcast ended", timeout: 10) {
+            self.fakeLog().contains { ($0["path"] as? String) == "/youtube/v3/liveBroadcasts/transition" && (($0["query"] as? [String: String])?["id"]) == id }
+        }
+        let log = fakeLog()
+        let inserts = log.filter { ($0["path"] as? String) == "/youtube/v3/liveBroadcasts" && ($0["method"] as? String) == "POST" }
+        XCTAssertEqual(inserts.count, 1, "one broadcast for the whole match")
+        let body = String(data: try JSONSerialization.data(withJSONObject: log), encoding: .utf8)!
+        XCTAssertFalse(body.contains("\"public\""), "a test build never sends public")
+        XCTAssertTrue(body.contains("\"enableAutoStop\":false"), "auto stop off: a drop does not end the broadcast")
+        shot("23 stopped")
+    }
 }

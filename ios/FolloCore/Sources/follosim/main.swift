@@ -272,6 +272,57 @@ case "interleave":   // follosim interleave — stage 1f: audio arriving 2 s bef
     let audioOut = out.filter { $0.1 }.count, videoOut = out.filter { !$0.1 }.count
     let maxLead = out.filter { $0.1 }.map { a in a.0 }.max() ?? 0
     print("interleaver: video \(videoOut)/\(Int(seconds * fps)), audio out \(audioOut) of \(audioIn) in (rest wait for later video: \(audioIn - audioOut - il.droppedAudio)), dropped \(il.droppedAudio); time-ordered \(ordered); last audio \(maxLead) ms ≤ last video \(out.last { !$0.1 }!.0) ms")
+case "youtube":   // follosim youtube --api http://127.0.0.1:8765 — stage 1: own Google sign-in + YouTube Live calls against src/fake_youtube.py
+    let api0 = args.firstIndex(of: "--api").map { args[$0 + 1] } ?? "http://127.0.0.1:8765"
+    var auth = GoogleAuth(clientId: "123-abc.apps.googleusercontent.com")
+    auth.authEndpoint = URL(string: api0 + "/auth")!; auth.tokenEndpoint = URL(string: api0 + "/token")!
+    final class NoRedirect: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ s: URLSession, task: URLSessionTask, willPerformHTTPRedirection r: HTTPURLResponse, newRequest: URLRequest) async -> URLRequest? { nil }
+    }
+    func check(_ ok: Bool, _ what: String) { print((ok ? "ok    " : "FAIL  ") + what); if !ok { exit(1) } }
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        do {
+            // 1. sign-in: the system web sheet would follow /auth to Google; the fake redirects straight back with a code
+            let attempt = auth.begin()
+            check(attempt.url.absoluteString.contains("code_challenge_method=S256") && attempt.url.absoluteString.contains("youtube.force-ssl"), "authorization URL has PKCE S256 and the YouTube scope")
+            check(auth.redirectURI == "com.googleusercontent.apps.123-abc:/oauthredirect", "redirect URI is the reversed client ID")
+            let (_, resp) = try await URLSession.shared.data(from: attempt.url, delegate: NoRedirect())
+            let loc = URL(string: (resp as! HTTPURLResponse).value(forHTTPHeaderField: "Location")!)!
+            check((try? auth.code(from: URL(string: loc.absoluteString.replacingOccurrences(of: "state=", with: "state=x"))!, attempt: attempt)) == nil, "a callback with a foreign state is rejected")
+            let code = try auth.code(from: loc, attempt: attempt)
+            let t0 = try await auth.exchange(code: code, verifier: attempt.verifier)
+            check(t0.refreshToken != nil, "code exchange gives a refresh token")
+            let t1 = try await auth.refresh(t0.refreshToken!)
+            check(t1.accessToken != t0.accessToken && t1.refreshToken == t0.refreshToken, "refresh gives a new access token and keeps the refresh token")
+            do { _ = try await auth.refresh("revoked"); check(false, "revoked refresh token") } catch GoogleAuth.AuthError.signedOut { check(true, "a revoked refresh token asks to sign in again") }
+            // 2. YouTube, debug build: public refused
+            let token = t1.accessToken
+            let api = YouTubeAPI(allowPublic: false) { token }
+            api.base = URL(string: api0 + "/youtube/v3/")!
+            check(try await api.channelTitle() == "Test channel", "channel title")
+            let (b, s) = try await api.prepare(streamId: nil, resumeBroadcastId: nil, title: "Follo test", privacy: .unlisted)
+            check(b.privacy == "unlisted" && b.watchURL.hasSuffix(b.id), "new broadcast is unlisted, link youtu.be/\(b.id)")
+            check(s.ingestURL.hasPrefix("rtmp") && !s.key.isEmpty, "reusable stream with an ingest address and key")
+            let (b2, s2) = try await api.prepare(streamId: s.id, resumeBroadcastId: b.id, title: "Follo test", privacy: .unlisted)
+            check(b2.id == b.id && s2 == s, "restart during the match: same broadcast (same link), same stream")
+            do { _ = try await api.setPrivacy(b.id, .public); check(false, "public in a debug build") } catch YouTubeAPI.APIError.publicNotAllowed { check(true, "debug build refuses public") }
+            do { _ = try await api.createBroadcast(title: "x", privacy: .public); check(false, "public broadcast in a debug build") } catch YouTubeAPI.APIError.publicNotAllowed { check(true, "debug build refuses a public broadcast") }
+            check(try await api.setPrivacy(b.id, .private).privacy == "private", "unlisted → private")
+            check(try await api.setPrivacy(b.id, .unlisted).privacy == "unlisted", "private → unlisted")
+            try await api.complete(b.id)
+            let (b3, s3) = try await api.prepare(streamId: s.id, resumeBroadcastId: b.id, title: "Follo test 2", privacy: .unlisted)
+            check(b3.id != b.id && s3 == s, "after STOP the next match gets a new broadcast on the same stream")
+            // 3. release build: public allowed, only when asked
+            let rel = YouTubeAPI(allowPublic: true) { token }; rel.base = api.base
+            check(try await rel.setPrivacy(b3.id, .public).privacy == "public", "release build: unlisted → public on request")
+            do { _ = try await YouTubeAPI(allowPublic: false) { "wrong" }.channelTitle(); check(false, "bad token") } catch YouTubeAPI.APIError.http(let c, _) { check(c == 401, "a bad token is an HTTP 401 error") }
+            print("YOUTUBE FLOW OK")
+        } catch { print("FAIL  \(error)"); exit(1) }
+        sem.signal()
+    }
+    sem.wait()
+
 case "join":   // follosim join OUT.mp4 CHUNK1 CHUNK2 … — "Зберегти у Фото": the chunks of a match as one file, no re-encoding
     let urls = args.dropFirst(3).map { URL(fileURLWithPath: $0) }
     let out = URL(fileURLWithPath: args[2]); let t0 = Date()

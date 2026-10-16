@@ -33,7 +33,11 @@ struct SetupView: View {
     @State var viewer = false
     @State var stoppedAt: Date?                                      // GO LIVE не спрацьовує 3 с після СТОП
     @State var holdingStop = false
-    @State var muted = false                                         // кнопка «Звук»: тиша в ефірі замість мікрофона
+    @State var muted = false
+    @StateObject var yt = YouTubeAccount()                           // власний вхід Google → ефір «Не для всіх»
+    @State var privacy: YouTubeAPI.Privacy = .unlisted               // з чим стартує ефір (debug: приватне або не для всіх)
+    @State var livePrivacy: String?                                  // видимість ефіру зараз (з YouTube)
+    @State var confirmPublic = false                                         // кнопка «Звук»: тиша в ефірі замість мікрофона
     @State var lastDbg = ""
     // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
     @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -80,10 +84,13 @@ struct SetupView: View {
                     HStack { Text("Команди"); Spacer(); Text("\(score.state.home.name) – \(score.state.away.name)").foregroundStyle(.secondary).lineLimit(1) }
                 }.font(.footnote).padding(10).background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            if let l = live {
-                HStack { Text(l.watchURL).font(.footnote).lineLimit(1); Spacer()
-                    Button("Копіювати") { UIPasteboard.general.string = l.watchURL } }
+            if !cam.isRecording, yt.auth != nil { youTubeRow }
+            if let l = live, cam.isRecording {
+                HStack { Text(l.watchURL).font(.footnote).lineLimit(1).accessibilityIdentifier("watchURL"); Spacer()
+                    Button("Копіювати") { UIPasteboard.general.string = l.watchURL }
+                    if let u = URL(string: l.watchURL), u.host?.contains("youtu") == true { ShareLink(item: u) { Image(systemName: "square.and.arrow.up") } } }
                     .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
+                if !l.broadcastId.isEmpty { livePrivacyRow(l) }
             }
             Text(error ?? cam.cameraError ?? status).accessibilityIdentifier("status").font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
             if !cam.isRecording, !CameraSession.testVideos.isEmpty {      // лише debug: тестове відео замість камери
@@ -111,7 +118,9 @@ struct SetupView: View {
                 }.font(.footnote)
             }
             if let w = ls.warning { Text(w).font(.footnote).foregroundStyle(.yellow) }
-            if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
+            if !cam.isRecording, yt.signedIn, let s = ls.saved, !s.broadcastId.isEmpty, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
+                Text("GO LIVE продовжить ефір \(s.watchURL) (те саме посилання)").font(.footnote).foregroundStyle(.secondary)
+            } else if !cam.isRecording, let s = ls.saved, Date().timeIntervalSince(s.startedAt) < 3 * 3600 {
                 Button("Відновити ефір \(s.watchURL.suffix(11))…") { live = LiveTarget(broadcastId: s.broadcastId, rtmpsURL: s.rtmpsURL, streamKey: s.streamKey, watchURL: s.watchURL); go(resume: true) }
                     .font(.footnote).disabled(!positionOK)
             }
@@ -140,6 +149,9 @@ struct SetupView: View {
         }
         .background(TouchWatcher { if Date().timeIntervalSince(lastTouch) > 1 { lastTouch = Date() } })    // дотик і прокрутка
         .sheet(isPresented: $showAdvice) { BeforeGameSheet { UserDefaults.standard.set(true, forKey: "advice.shown"); showAdvice = false } }
+        .confirmationDialog("Зробити ефір «Для всіх»? Його побачать на каналі, у пошуку і підписники отримають сповіщення.", isPresented: $confirmPublic, titleVisibility: .visible) {
+            Button("Так, для всіх") { if let l = live { setPrivacy(l, .public) } }
+        }
         .sheet(isPresented: $showTeams) { TeamsSheet(score: score) { showTeams = false } }
         .onChange(of: score.state) { _, _ in if startedAt != nil { score.push(to: ls.runner) } }
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress, match: match) }
@@ -189,7 +201,8 @@ struct SetupView: View {
     /// Тест: тестове відео замість камери або запуск з Mac. Правило власника: у тестах звук ефіру завжди вимкнений.
     var isTest: Bool { cam.testVideo != nil || CommandLine.arguments.contains("--autostart") }
 
-    func go(resume: Bool = false) {
+    func go(resume resumeAsked: Bool = false) {
+        var resume = resumeAsked
         guard positionOK else { DebugLog.log("GO LIVE refused: position not checked (\(ls.runner.env?.positionProblem ?? "no pitch yet"))"); return }
         if isTest && !muted { muted = true; ls.streamer.setMuted(true) }
         error = nil; status = "Створюю трансляцію…"
@@ -197,18 +210,28 @@ struct SetupView: View {
         if !problems.isEmpty && !resume { status = problems.joined(separator: " · ") }
         Task {
             do {
-                // TODO: токен з Google Sign-In; поки що — з Info.plist ключ YT_TOKEN для тесту
-                let token = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""
-                if !resume, !token.isEmpty { live = try await YouTubeLive.createBroadcast(token: token, title: "Follo \(Date().formatted(date: .abbreviated, time: .shortened))") }
+                if yt.signedIn {
+                    // ефір, що лишився після перезапуску застосунку посеред матчу (Стоп не натискали), — той самий: те саме посилання
+                    let saved = ls.saved.flatMap { !$0.broadcastId.isEmpty && Date().timeIntervalSince($0.startedAt) < 3 * 3600 ? $0 : nil }
+                    // старий ефір після збою (автостоп вимкнено, сам YouTube його не закриє): закрити, щоб не висів «в ефірі»
+                    if let old = ls.saved, !old.broadcastId.isEmpty, saved == nil {
+                        let api = yt.api(); Task { try? await api.complete(old.broadcastId); DebugLog.log("YouTube: closed stale broadcast \(old.broadcastId)") }
+                    }
+                    let (b, st) = try await yt.api().prepare(streamId: yt.streamId, resumeBroadcastId: saved?.broadcastId, title: "Follo \(Date().formatted(date: .abbreviated, time: .shortened))", privacy: privacy)
+                    yt.streamId = st.id; livePrivacy = b.privacy
+                    if b.id == saved?.broadcastId { resume = true }
+                    live = LiveTarget(broadcastId: b.id, rtmpsURL: st.ingestURL, streamKey: st.key, watchURL: b.watchURL)
+                    DebugLog.log("YouTube: broadcast \(b.id) \(b.privacy)\(resume ? " (same as before the restart)" : ""), engine \(Streamer.engine.rawValue)")
+                }
                 else if !resume, let t = YouTubeLive.debugTarget() {                        // debug: свій RTMP-сервер (ffmpeg на Mac)
                     live = LiveTarget(broadcastId: "", rtmpsURL: t.url, streamKey: t.key, watchURL: t.url)
                     DebugLog.log("stream target: \(t.url) (debug), engine \(Streamer.engine.rawValue)")
                 }
-                else if !resume, token.isEmpty, let k = YouTubeLive.debugStreamKey() {      // debug: ключ з YouTube Studio
+                else if !resume, let k = YouTubeLive.debugStreamKey() {      // debug: ключ з YouTube Studio
                     live = LiveTarget(broadcastId: "", rtmpsURL: YouTubeLive.studioIngest, streamKey: k, watchURL: "https://studio.youtube.com")
                     DebugLog.log("YouTube: Studio stream key")
                 }
-                else if live == nil { status = "Без YouTube: лише запис (додай Google Sign-In)" }
+                else if live == nil { status = "Без YouTube: лише запис (увійди в YouTube)" }
                 if !resume { score.newMatch() }
                 // debug: --clock H:MM:SS ставить тайм і час після старту (перевірка табло з Mac)
                 if let i = CommandLine.arguments.firstIndex(of: "--clock"), i + 1 < CommandLine.arguments.count {
@@ -256,8 +279,54 @@ struct SetupView: View {
                 MatchStore.upsert(m); match = m
             }
         }
-        if let l = target, !l.broadcastId.isEmpty { Task { let t = Bundle.main.object(forInfoDictionaryKey: "YT_TOKEN") as? String ?? ""; await YouTubeLive.complete(token: t, broadcastId: l.broadcastId) } }
+        if let l = target, !l.broadcastId.isEmpty, yt.signedIn {
+            Task { do { try await yt.api().complete(l.broadcastId); DebugLog.log("YouTube: broadcast \(l.broadcastId) ended") } catch { DebugLog.log("YouTube: end failed: \(error.localizedDescription)") } }
+        }
+        livePrivacy = nil
         status = "Записано \(cam.chunkCount) файлів 4K — у «Моїх матчах»: переглянути і зберегти у Фото"
+    }
+
+    /// До ефіру: вхід у YouTube і з якою видимістю стартувати. «Для всіх» тут немає ніколи: лише під час ефіру, в релізі.
+    var youTubeRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "play.rectangle.fill").foregroundStyle(.red)
+                if yt.signedIn { Text("YouTube: \(yt.channel ?? "вхід виконано")").lineLimit(1); Spacer(); Button("Вийти") { yt.signOut() }.foregroundStyle(.secondary) }
+                else { Button(yt.busy ? "Вхід…" : "Увійти в YouTube (Google)") { Task { await yt.signIn() } }.disabled(yt.busy).accessibilityIdentifier("signIn"); Spacer() }
+            }
+            if yt.signedIn {
+                #if DEBUG
+                Picker("Видимість", selection: $privacy) { Text("Приватне").tag(YouTubeAPI.Privacy.private); Text("Не для всіх").tag(YouTubeAPI.Privacy.unlisted) }
+                    .pickerStyle(.segmented).accessibilityIdentifier("privacyPicker")
+                #else
+                Text("Ефір стартує «Не для всіх»: бачать лише ті, кому ти дав посилання").font(.caption2).foregroundStyle(.secondary)
+                #endif
+            }
+            if let e = yt.error { Text(e).font(.caption2).foregroundStyle(.yellow) }
+        }.font(.footnote).padding(10).background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Під час ефіру: видимість і перемикач. Тестова збірка: приватне ⇄ не для всіх. Реліз: «Для всіх» з підтвердженням.
+    func livePrivacyRow(_ l: LiveTarget) -> some View {
+        let p = livePrivacy ?? ""
+        let name = ["private": "Приватне", "unlisted": "Не для всіх", "public": "Для всіх"][p] ?? "…"
+        return HStack {
+            Image(systemName: p == "public" ? "globe" : p == "unlisted" ? "link" : "lock.fill")
+            Text(name).accessibilityIdentifier("privacy"); Spacer()
+            #if DEBUG
+            Button(p == "private" ? "Зробити «Не для всіх»" : "Зробити приватним") { setPrivacy(l, p == "private" ? .unlisted : .private) }
+            #else
+            if p == "public" { Button("Зробити «Не для всіх»") { setPrivacy(l, .unlisted) } }
+            else { Button("Зробити «Для всіх»…") { confirmPublic = true } }
+            #endif
+        }.font(.footnote).padding(10).background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    func setPrivacy(_ l: LiveTarget, _ p: YouTubeAPI.Privacy) {
+        Task {
+            do { livePrivacy = try await yt.api().setPrivacy(l.broadcastId, p).privacy; DebugLog.log("YouTube: privacy \(livePrivacy ?? "")") }
+            catch { self.error = error.localizedDescription }
+        }
     }
 
     var thermalText: String { ["ok", "ok", "гаряче", "критично"][min(thermal.rawValue, 3)] }

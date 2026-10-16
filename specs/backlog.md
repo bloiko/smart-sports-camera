@@ -60,6 +60,9 @@ Status of the 21 edge-case items lives in `docs/live-edge-cases.md`. Done in cod
 5. ~~Onboarding and "My matches" screens~~ Done in code 2026-10-12 (`OnboardingView.swift`: sign-in placeholder, 3 cards, permissions; `MyMatchesView.swift` + `MatchStore.swift`: list, new match, free space, delete the 4K recording). Google Sign-In itself still needs the SDK and a Google Cloud project (owner).
 Needs the owner: Xcode install and first run (`docs/run-on-iphone.md`), own iPhone footage, Google Cloud project for YouTube (`docs/youtube-live.md`).
 
+### 4. Replace the AGPL detectors before any paid release (owner, 2026-10-16)
+- Plan with options and acceptance criteria: `docs/detector-licence-plan.md`. Realistic: players with an Apache-2.0 detector fine-tuned on SoccerTrack frames (YOLOX safe default; D-FINE/DEIM/RF-DETR if fast enough on the phone), ball with YOLOX-nano or our own heatmap CNN. About 3 weeks; does not block test matches.
+
 ## P1: next
 
 4. **Own iPhone footage** (phase 0): 10–15 minutes, ultra-wide 0.5×, 4K 30 fps, tripod 2–3 m. Run the whole pipeline on it.

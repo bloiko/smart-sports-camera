@@ -552,7 +552,7 @@ test-video source had been left on after the test runs.
 - highlights are saved per match.
 
 `follosim join`: 3 real phone chunks (180 s + 170 s interrupted + 60 s) became one 410 s file in 1.3 s without
-re-encoding; the joins decode cleanly. Saving to Photos still needs a tap by the owner, for the permission.
+re-encoding; the joins decode cleanly. Saving to Photos confirmed on the phone by the owner (2026-10-16): the video appears in Photos.
 
 ## Goal checklist
 

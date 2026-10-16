@@ -312,6 +312,25 @@ Cause (camera internals, match 3 at 2:20–2:25): the goal weight follows the nu
 
 Before/after videos (match 3 2:18–2:28, match 1 goal 2:50–2:58) rendered side by side: before, the camera drifts left at 2:21.8–2:23.4 and cuts the right goal during the attack; after, it holds the attack with the goal.
 
+## Own stack, stage 1a: own H.264 encoder (2026-10-16, Mac)
+
+`FolloCore/VideoEncoder.swift` (VideoToolbox, system framework): H.264 High, no B-frames, a keyframe every 2 s, average
+bitrate with a 1.5× one-second cap, BT.709 colour conversion and tags. Test: `follosim encode VIDEO PATH.json OUT.mp4`
+takes the stream frames (1080p crops of the camera path, as `LiveCameraRunner.emit`). "Before" is the same Apple hardware
+encoder driven by ffmpeg with HaishinKit-like settings (`h264_videotoolbox`, 4.5 Mbit/s, High, GOP 50, no B-frames) on
+the same frames (`--raw-stdout`). PSNR is measured against the uncompressed crops.
+
+| Test | Result |
+| --- | --- |
+| Validity (match 2, 10 s) | 250/250 frames, 0 dropped, High profile, no B-frames, decodes without errors |
+| Quality, 4.5 Mbit/s | ours 39.98 dB average (worst frame 36.4), before 40.04 dB (worst 35.2): equal |
+| Colour | Untagged, VideoToolbox and ffmpeg used different RGB→YUV matrices (looked like 6 dB worse). Now BT.709 conversion and tags; HaishinKit's stream today is untagged |
+| 60 s, matches 2 and 3 | 1500/1500 frames each, average 4495 / 4497 kbit/s, per-second peak 5391 / 5148 (cap 6750), keyframes every 50 frames |
+| Bitrate steps 4500 → 3000 → 2000 | Followed within the same second; a forced keyframe lands on its frame and the 2 s rhythm continues from it |
+| 1080p vs 720p at 2 Mbit/s | 36.5 vs 36.3 dB (720p upscaled): equal, so the low step keeps 1080p (no new session, no new stream header) |
+| Speed (M1) | ~150 fps, 6× real time; encoder latency 62–70 ms when frames arrive faster than real time |
+| Frames | Ours at 4.5 Mbit/s and the reference look the same; 2 Mbit/s softens the grass texture |
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

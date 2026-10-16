@@ -1,3 +1,4 @@
+import VideoToolbox
 import AVFoundation
 import ImageIO
 import Foundation
@@ -44,6 +45,77 @@ case "frames":   // follosim frames VIDEO — sample timestamps as AVAssetReader
         if CMSampleBufferGetNumSamples(sb) > 0 { if n < 4 { first.append(String(format: "%.3f", CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))) }; n += 1 }
     }
     print("samples \(n), first PTS \(first), track timeRange start \(CMTimeGetSeconds(t.timeRange.start)) segments \(t.segments.prefix(3).map { "\(CMTimeGetSeconds($0.timeMapping.source.start))→\(CMTimeGetSeconds($0.timeMapping.target.start)) empty \($0.isEmpty)" })")
+case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--seconds N] [--bitrate B] [--raw-stdout]
+    // Stage 1a: the stream frames (1080p crops of the camera path) through our VideoEncoder → OUT.mp4 (passthrough).
+    // --raw-stdout writes the uncompressed BGRA crops to stdout instead (reference for ffmpeg: same frames, other encoder).
+    let raw = args.contains("--raw-stdout")
+    func log(_ t: String) { FileHandle.standardError.write((t + "\n").data(using: .utf8)!) }
+    let reader = try! VideoReader(path: args[2]); let fps = reader.fps
+    let path = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: args[3]))) as! [String: Any]
+    let PX = path["X"] as! [Double], PY = path["Y"] as! [Double], PW = path["CW"] as! [Double], PH = path["CH"] as! [Double]
+    let f0 = Int((args.firstIndex(of: "--from").map { Double(args[$0 + 1])! } ?? 0) * fps)
+    let n = Int((args.firstIndex(of: "--seconds").map { Double(args[$0 + 1])! } ?? 10) * fps)
+    let size = (args.firstIndex(of: "--size").map { args[$0 + 1] } ?? "1920x1080").split(separator: "x").map { Int($0)! }
+    let OW = size[0], OH = size[1]
+    var es = VideoEncoder.Settings(); es.width = OW; es.height = OH; es.fps = fps; es.bitrate = args.firstIndex(of: "--bitrate").map { Int(args[$0 + 1])! } ?? 4_500_000
+    let enc = try! VideoEncoder(es)
+    // --steps 4:3000000,7:2000000 → setBitrate at those seconds (adaptive bitrate); --force-key 3.3 → forced keyframe
+    let steps: [(Int, Int)] = (args.firstIndex(of: "--steps").map { args[$0 + 1] } ?? "").split(separator: ",").map { p in let a = p.split(separator: ":"); return (Int(Double(a[0])! * fps), Int(a[1])!) }
+    let forceAt = args.firstIndex(of: "--force-key").map { Int(Double(args[$0 + 1])! * fps) } ?? -1
+    let ctx = CIContext(options: [.cacheIntermediates: false])
+    var pool: CVPixelBufferPool?
+    CVPixelBufferPoolCreate(nil, nil, [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: OW,
+                                       kCVPixelBufferHeightKey as String: OH, kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &pool)
+    var writer: AVAssetWriter?, input: AVAssetWriterInput?
+    var sizes: [Int] = [], keys: [Int] = [], submitted: [Double] = [], latency: [Double] = []
+    let out = URL(fileURLWithPath: args[4]); try? FileManager.default.removeItem(at: out)
+    let q = DispatchQueue(label: "enc.out")
+    enc.onFrame = { fr in q.sync {
+        if writer == nil {
+            let w = try! AVAssetWriter(outputURL: out, fileType: .mp4)
+            let i = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: fr.format); i.expectsMediaDataInRealTime = false
+            w.add(i); w.startWriting(); w.startSession(atSourceTime: fr.pts); writer = w; input = i
+            log("parameter sets: \(fr.parameterSets.map { $0.count }) bytes")
+        }
+        while !input!.isReadyForMoreMediaData { usleep(1000) }
+        input!.append(fr.sampleBuffer()!)
+        let k = sizes.count
+        if fr.isKey { keys.append(k) }
+        sizes.append(fr.data.count); latency.append(CACurrentMediaTime() - submitted[k])
+    } }
+    try! reader.start(from: f0)
+    let stdout = FileHandle.standardOutput; let t0 = Date()
+    for i in 0..<n {
+        let more: Bool = autoreleasepool {
+            guard let pb = reader.next() else { return false }
+            let f = f0 + i, H = Double(CVPixelBufferGetHeight(pb))
+            let rect = CGRect(x: PX[f] - PW[f] / 2, y: H - (PY[f] + PH[f] / 2), width: PW[f], height: PH[f])    // as LiveCameraRunner.emit
+            var img = CIImage(cvPixelBuffer: pb).cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+            img = img.transformed(by: CGAffineTransform(scaleX: Double(OW) / PW[f], y: Double(OH) / PH[f]))
+            var o: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool!, &o); let ob = o!
+            ctx.render(img, to: ob, bounds: CGRect(x: 0, y: 0, width: OW, height: OH), colorSpace: CGColorSpaceCreateDeviceRGB())
+            if raw {
+                CVPixelBufferLockBaseAddress(ob, .readOnly); let bpr = CVPixelBufferGetBytesPerRow(ob), base = CVPixelBufferGetBaseAddress(ob)!
+                var d = Data(capacity: OW * OH * 4); for y in 0..<OH { d.append(Data(bytes: base + y * bpr, count: OW * 4)) }
+                CVPixelBufferUnlockBaseAddress(ob, .readOnly); stdout.write(d)
+            } else {
+                q.sync { submitted.append(CACurrentMediaTime()) }
+                if let st = steps.first(where: { $0.0 == i }) { enc.setBitrate(st.1); log("bitrate → \(st.1 / 1000) at frame \(i)") }
+                enc.encode(ob, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())), forceKey: i == forceAt)
+            }
+            return true
+        }
+        if !more { break }
+    }
+    if raw { log("raw: \(n) frames"); break }
+    enc.flush(); q.sync {}
+    let done = DispatchSemaphore(value: 0); input?.markAsFinished(); writer?.finishWriting { done.signal() }; done.wait()
+    let secs = Double(sizes.count) / fps, kbps = Double(sizes.reduce(0, +)) * 8 / secs / 1000
+    var perSecond: [Double] = []; var j = 0
+    while j < sizes.count { perSecond.append(Double(sizes[j..<min(j + Int(fps), sizes.count)].reduce(0, +)) * 8 / 1000); j += Int(fps) }
+    let gaps = zip(keys.dropFirst(), keys).map { $0 - $1 }
+    if args.contains("--per-second") { log("per-second kbit/s: " + perSecond.map { "\(Int($0))" }.joined(separator: " ")) }
+    log("encoded \(sizes.count)/\(n) frames (dropped \(enc.dropped)) in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s; average \(Int(kbps)) kbit/s (target \(es.bitrate / 1000)); per-second max \(Int(perSecond.max() ?? 0)) min \(Int(perSecond.min() ?? 0)); keyframes at \(keys.prefix(6))…, gaps \(Set(gaps).sorted()); latency median \(Int(Stats.percentile(latency, 50) * 1000)) ms p95 \(Int(Stats.percentile(latency, 95) * 1000)) ms → \(args[4])")
 case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [

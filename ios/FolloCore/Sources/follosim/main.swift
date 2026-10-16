@@ -151,6 +151,55 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
     let gaps = zip(keys.dropFirst(), keys).map { $0 - $1 }
     if args.contains("--per-second") { log("per-second kbit/s: " + perSecond.map { "\(Int($0))" }.joined(separator: " ")) }
     log("encoded \(sizes.count)/\(n) frames (dropped \(enc.dropped)) in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s; average \(Int(kbps)) kbit/s (target \(es.bitrate / 1000)); per-second max \(Int(perSecond.max() ?? 0)) min \(Int(perSecond.min() ?? 0)); keyframes at \(keys.prefix(6))…, gaps \(Set(gaps).sorted()); latency median \(Int(Stats.percentile(latency, 50) * 1000)) ms p95 \(Int(Stats.percentile(latency, 95) * 1000)) ms → \(args[4])")
+case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SENT.flv [--from S] [--seconds N] [--capacity C] [--catchup F] [--insecure-tls]
+    // Stage 1d: real-time encode → FolloStreamer (ring buffer + reconnect) → RTMP. SENT.flv holds every frame produced.
+    func log(_ t: String) { FileHandle.standardError.write(("\(String(format: "%7.1f", ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 100000))) " + t + "\n").data(using: .utf8)!) }
+    func arg(_ k: String) -> String? { args.firstIndex(of: k).map { args[$0 + 1] } }
+    let reader = try! VideoReader(path: args[2]); let fps = reader.fps
+    let path = try! JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: args[3]))) as! [String: Any]
+    let PX = path["X"] as! [Double], PY = path["Y"] as! [Double], PW = path["CW"] as! [Double], PH = path["CH"] as! [Double]
+    let f0 = Int((arg("--from").map { Double($0)! } ?? 0) * fps), n = Int((arg("--seconds").map { Double($0)! } ?? 60) * fps)
+    var es = VideoEncoder.Settings(); es.fps = fps
+    let enc = try! VideoEncoder(es)
+    var cfg = FolloStreamer.Config(); if let c = arg("--capacity") { cfg.capacityS = Double(c)! }; if let c = arg("--catchup") { cfg.catchUp = Double(c)! }
+    let st = FolloStreamer(url: arg("--rtmp")!, key: arg("--key") ?? "test", config: cfg)
+    st.trustAnyCertificateForTests = args.contains("--insecure-tls"); st.requestAcksForTests = !args.contains("--no-ack-request"); st.log = { log("streamer: " + $0) }
+    let sent = try! FLVWriter(path: arg("--sent")!, audio: false); var headerDone = false; var produced = 0
+    let q = DispatchQueue(label: "enc.out")
+    enc.onFrame = { fr in q.sync {
+        let ms = UInt32((CMTimeGetSeconds(fr.pts) * 1000).rounded())
+        if !headerDone, let avcC = FLV.avcC(of: fr.format) {
+            let meta = FLV.metadata(width: 1920, height: 1080, fps: fps, videoKbps: 4500, audio: false), avc = FLV.videoSequenceHeader(avcC: avcC)
+            sent.write(.script, ms: 0, body: meta); sent.write(.video, ms: 0, body: avc); st.setHeaders(meta: meta, avc: avc); headerDone = true
+        }
+        let body = FLV.videoPacket(fr.data, isKey: fr.isKey)
+        sent.write(.video, ms: ms, body: body); st.push(.video, body: body, ms: ms, isKey: fr.isKey); produced += 1
+    } }
+    let ctx = CIContext(options: [.cacheIntermediates: false]); var pool: CVPixelBufferPool?
+    CVPixelBufferPoolCreate(nil, nil, [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 1920,
+                                       kCVPixelBufferHeightKey as String: 1080, kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &pool)
+    st.start(); try! reader.start(from: f0); let t0 = Date()
+    for i in 0..<n {
+        let more: Bool = autoreleasepool {
+            guard let pb = reader.next() else { return false }
+            let f = f0 + i, H = Double(CVPixelBufferGetHeight(pb))
+            let rect = CGRect(x: PX[f] - PW[f] / 2, y: H - (PY[f] + PH[f] / 2), width: PW[f], height: PH[f])
+            var img = CIImage(cvPixelBuffer: pb).cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+            img = img.transformed(by: CGAffineTransform(scaleX: 1920 / PW[f], y: 1080 / PH[f]))
+            var o: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool!, &o)
+            ctx.render(img, to: o!, bounds: CGRect(x: 0, y: 0, width: 1920, height: 1080), colorSpace: CGColorSpaceCreateDeviceRGB())
+            let due = t0.addingTimeInterval(Double(i) / fps).timeIntervalSinceNow; if due > 0 { usleep(useconds_t(due * 1_000_000)) }
+            enc.encode(o!, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())))
+            if let j = arg("--jump-at").map({ Int(Double($0)! * fps) }), i == j { log("jump to live (delay was \(String(format: "%.1f", st.delayS)) s)"); st.jumpToLive() }
+            if i % Int(5 * fps) == 0 { log(String(format: "t=%3.0f s publishing %@ delay %.1f s reconnects %d ring %.1f MB (peak %.1f) resent %d dropped-from-ring %d", Double(i) / fps, st.isPublishing ? "yes" : "NO ", st.delayS, st.reconnects, Double(st.ringBytes) / 1e6, Double(st.ringPeakBytes) / 1e6, st.resentFrames, st.droppedFromRing)) }
+            return true
+        }
+        if !more { break }
+    }
+    enc.flush(); q.sync {}; sent.close()
+    log("produced \(produced) frames; draining…")
+    let done = DispatchSemaphore(value: 0); st.stop(drainS: Double(arg("--drain") ?? "150")!) { done.signal() }; done.wait()
+    log(String(format: "final: reconnects %d, drops resolved by server acks %d, resent %d, dropped-from-ring %d, ring peak %.1f MB, sent items %d", st.reconnects, st.ackedDrops, st.resentFrames, st.droppedFromRing, Double(st.ringPeakBytes) / 1e6, st.sentFrames))
 case "scoreboards":   // follosim scoreboards DIR — every style in four states (design review)
     var st = ScoreState(home: ScoreTeam(name: "ФК Іваничі", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "ФК Андердог", r: 0.1, g: 0.3, b: 0.85))
     let states: [(String, Int, Int, ScoreExtras)] = [

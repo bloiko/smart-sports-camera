@@ -13,6 +13,19 @@ public final class RTMPClient {
     /// Bytes handed to the network and not yet confirmed as sent (backpressure for the buffer of stage 1d).
     public private(set) var bytesInFlight = 0
     public private(set) var bytesSent = 0
+    /// Every audio/video message gets a number; `confirmedTag` is the highest number whose bytes the network stack has
+    /// taken (stage 1d: which frames left the phone before a drop).
+    public private(set) var confirmedTag = 0
+    private var tagCounter = 0
+    private let tagLock = NSLock()
+    /// Bytes the server says it received (RTMP Acknowledgement, sent every `ackWindow` bytes after we ask for it), and the
+    /// stream offset where each numbered message ends: together they tell which frames surely reached the server.
+    public private(set) var serverAckedBytes = 0
+    public private(set) var acksReceived = 0
+    /// Largest number of bytes between two acknowledgements seen on this connection (the server's real cadence).
+    public private(set) var ackSpacing = 0
+    public let ackWindow = 262_144
+    private var queuedBytes = 0, tagEnd: [(tag: Int, end: Int)] = []
 
     public let queue = DispatchQueue(label: "follo.rtmp")
     private var conn: NWConnection?
@@ -26,6 +39,8 @@ public final class RTMPClient {
 
     /// Tests only (`follosim --insecure-tls` against a local TLS proxy with a self-signed certificate). Never set in the app.
     public var trustAnyCertificateForTests = false
+    /// Tests only: do not ask the server for frequent acknowledgements (a server that acknowledges on its own schedule).
+    public var requestAcks = true
 
     public init() {}
 
@@ -64,8 +79,9 @@ public final class RTMPClient {
 
     /// onMetaData via @setDataFrame (body from `FLV.metadata`, which starts with the "onMetaData" string).
     public func sendMetadata(_ body: Data) { var d = AMF0.string("@setDataFrame"); d.append(body); sendMessage(csid: 4, type: 18, sid: streamId, ts: 0, d) }
-    public func sendVideo(_ body: Data, ms: UInt32) { sendMessage(csid: 6, type: 9, sid: streamId, ts: ms, body) }
-    public func sendAudio(_ body: Data, ms: UInt32) { sendMessage(csid: 4, type: 8, sid: streamId, ts: ms, body) }
+    @discardableResult public func sendVideo(_ body: Data, ms: UInt32) -> Int { let t = newTag(); sendMessage(csid: 6, type: 9, sid: streamId, ts: ms, body, tag: t); return t }
+    @discardableResult public func sendAudio(_ body: Data, ms: UInt32) -> Int { let t = newTag(); sendMessage(csid: 4, type: 8, sid: streamId, ts: ms, body, tag: t); return t }
+    private func newTag() -> Int { tagLock.lock(); defer { tagLock.unlock() }; tagCounter += 1; return tagCounter }
 
     /// Polite end: FCUnpublish, deleteStream, then close the socket once everything queued has been sent.
     public func close(then done: (() -> Void)? = nil) {
@@ -111,6 +127,7 @@ public final class RTMPClient {
             write(s1)                                                   // C2 = echo of S1
             handshaking = false; log?("handshake done")
             sendMessage(csid: 2, type: 1, sid: 0, ts: 0, be32(4096)); outChunk = 4096
+            if requestAcks { sendMessage(csid: 2, type: 5, sid: 0, ts: 0, be32(UInt32(ackWindow))) }   // ask the server to acknowledge every 256 KB
             command("connect", txn: 1, [.object([("app", .string(app)), ("type", .string("nonprivate")), ("flashVer", .string("FMLE/3.0 (compatible; Follo)")),
                                                 ("tcUrl", .string(tcUrl))])])
         }
@@ -161,7 +178,9 @@ public final class RTMPClient {
         func be32at(_ i: Int) -> UInt32 { b.count >= i + 4 ? UInt32(b[i]) << 24 | UInt32(b[i + 1]) << 16 | UInt32(b[i + 2]) << 8 | UInt32(b[i + 3]) : 0 }
         switch type {
         case 1: inChunk = Int(be32at(0) & 0x7FFF_FFFF); log?("server chunk size \(inChunk)")
-        case 3: break                                                                  // acknowledgement
+        case 3:                                                                        // acknowledgement: bytes the server got
+            let v = Int(be32at(0)); if acksReceived > 0 { ackSpacing = max(ackSpacing, v - serverAckedBytes) }
+            serverAckedBytes = v; acksReceived += 1
         case 5: windowAck = Int(be32at(0)); log?("window ack size \(windowAck)")
         case 6: sendMessage(csid: 2, type: 5, sid: 0, ts: 0, be32(be32at(0)))          // set peer bandwidth → our window ack size
         case 4:                                                                        // user control: ping request → ping response
@@ -203,7 +222,7 @@ public final class RTMPClient {
     }
 
     /// A message as chunks: type-0 header on the first chunk, type-3 headers on continuations; extended timestamp when needed.
-    private func sendMessage(csid: UInt32, type: UInt8, sid: UInt32, ts: UInt32, _ payload: Data) {
+    private func sendMessage(csid: UInt32, type: UInt8, sid: UInt32, ts: UInt32, _ payload: Data, tag: Int = 0) {
         queue.async { [self] in
             guard conn != nil else { return }
             let ext = ts >= 0xFFFFFF, t24 = ext ? 0xFFFFFF : ts
@@ -220,16 +239,31 @@ public final class RTMPClient {
                 let k = min(outChunk, n - o)
                 out.append(payload.subdata(in: (payload.startIndex + o)..<(payload.startIndex + o + k))); o += k
             }
-            write(out)
+            queuedBytes += out.count
+            if tag > 0 { tagEnd.append((tag, queuedBytes)); if tagEnd.count > 8000 { tagEnd.removeFirst(2000) } }
+            write(out, tag: tag)
         }
     }
 
-    private func write(_ d: Data) {
+    /// The highest message number whose bytes the server acknowledged (nil before the first acknowledgement).
+    /// `slack` covers servers that also count the handshake (3073 bytes) in their sequence number.
+    /// Bytes queued after the handshake and the server's acknowledged count, read together (stall detection).
+    public func ackState() -> (queued: Int, acked: Int, acks: Int, spacing: Int) { queue.sync { (queuedBytes, serverAckedBytes, acksReceived, ackSpacing) } }
+
+    public func deliveredTag(slack: Int = 3073) -> Int? {
+        queue.sync {
+            guard acksReceived > 0 else { return nil }
+            return tagEnd.last(where: { $0.end <= serverAckedBytes - slack })?.tag ?? 0
+        }
+    }
+
+    private func write(_ d: Data, tag: Int = 0) {
         guard let c = conn else { return }
         bytesInFlight += d.count
         c.send(content: d, completion: .contentProcessed { [weak self] err in
             guard let self else { return }
             self.bytesInFlight -= d.count; self.bytesSent += d.count
+            if err == nil, tag > self.confirmedTag { self.confirmedTag = tag }
             if let err { self.fail("send: \(err)") }
         })
     }

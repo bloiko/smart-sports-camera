@@ -374,6 +374,51 @@ client, sending the same FLV.
 The ffmpeg server logs "Error during demuxing: Input/output error" at the end for both clients: it is how it reports
 the publisher leaving. Still to test: a real YouTube RTMPS ingest (possible from the Mac once the stream key exists).
 
+## Own stack, stage 1d: network-drop buffer and reconnect (2026-10-16, Mac)
+
+`FolloCore/FolloStreamer.swift` keeps a ring of encoded frames, 180 s by default (~100 MB at 4.5 Mbit/s). A sender paces
+the frames to `RTMPClient` and handles drops:
+- **Detection.** A drop is: the server closes the connection; an error; no acknowledgement for long enough while data is
+  waiting; or a stall of the send buffer.
+- **Reconnect.** Every 2 s.
+- **Resend.** On a new connection it sends the headers first, then frames from the last keyframe before the first
+  unacknowledged frame.
+- **Pacing.** Frames are paced in real time by default (a delay line), or with `catchUp` > 1 to win the delay back.
+  `jumpToLive()` drops the backlog.
+
+`RTMPClient` asks the server for an acknowledgement every 256 KB (Window Acknowledgement Size) and maps the acknowledged
+byte count to message numbers.
+
+**Test setup.**
+- `follosim stream` encodes match 2 in real time into the streamer and writes every frame it produced to `sent.flv`.
+- `src/netfault.py` is a local proxy that cuts the link on a schedule: `reset` closes the connection and refuses new
+  ones; `blackhole` silently stops passing bytes (mobile data that just stops).
+- ffmpeg `-copyts -listen 1` records every connection, restarted in a loop.
+- `src/stream_check.py` matches every produced frame with everything received, by content.
+
+| Scenario (stream 90–120 s, drop at 30 s) | Result |
+| --- | --- |
+| No drop, 30 s | 750/750 delivered, 1 connection, delay 0 |
+| Reset 10 s / 30 s | 0 missing; 45–48 duplicates (≤ 1 GOP: the new connection must start at a keyframe) |
+| Blackhole 60 s | 0 missing; 45 duplicates; drop noticed 4.2 s after the link stopped (8.0 s before acknowledgements) |
+| Blackhole 60 s, ring only 30 s | 804 frames (32 s) lost by design: the ring kept the last 30 s; recovered at a keyframe, 0 duplicates |
+| Reset 30 s, catch-up 1.5× | 0 missing; delay at 105 s: 9.5 s (32 s without catch-up) |
+| Server acknowledging on its own cadence (2.5 MB), no drop, 90 s | 0 false reconnects, 2250/2250 |
+| The same server, blackhole 60 s | Noticed after 4.3 s, 0 missing |
+| Jump to live after reset 30 s | Delay 31.9 s → 2.0 s; the 749 skipped frames are the intended skip; continues at a keyframe |
+| Decoding after reconnect and jump | ffmpeg decodes every received stream without errors |
+
+**Bugs found and fixed on the way.**
+- Frames went out before the AVC header when the connection was ready before the first frame: the server could not read
+  the stream and closed it.
+- A failed reconnect attempt reset the position and re-sent the whole ring: 746 duplicates, which would have meant 30 s
+  shown twice.
+- "Handed to the system" was taken as "received by the server": 5 frames would have been lost. It is replaced by the
+  server's acknowledgements.
+
+**Still to test on YouTube.** Whether it honours our acknowledgement window, and how it treats a re-sent GOP with
+earlier timestamps on a new connection.
+
 ## Goal checklist
 
 **Summary (2026-10-11): v0.3 passes 7 of 7 events (2 goals, 2 chances, 3 attacks); v0.2 passes 3 of 7.**

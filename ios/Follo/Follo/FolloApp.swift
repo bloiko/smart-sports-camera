@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 @main
 struct FolloApp: App {
@@ -8,6 +9,32 @@ struct FolloApp: App {
         #if DEBUG
         if CommandLine.arguments.contains("--wipe-matches") { Self.wipeMatches() }
         #endif
+        Self.watchSystemEvents()
+    }
+
+    /// Why iOS takes the app off the screen (found in a 90-min run: the app went to the background at 33 min with no
+    /// visible cause). Every event goes to the debug log.
+    static func watchSystemEvents() {
+        let nc = NotificationCenter.default
+        let named: [(Notification.Name, String)] = [
+            (UIApplication.willResignActiveNotification, "app will resign active"),
+            (UIApplication.didEnterBackgroundNotification, "app did enter background"),
+            (UIApplication.willEnterForegroundNotification, "app will enter foreground"),
+            (UIApplication.didBecomeActiveNotification, "app did become active"),
+            (UIApplication.protectedDataWillBecomeUnavailableNotification, "device LOCKED (protected data unavailable)"),
+            (UIApplication.protectedDataDidBecomeAvailableNotification, "device unlocked"),
+            (UIApplication.didReceiveMemoryWarningNotification, "MEMORY WARNING"),
+            (UIApplication.userDidTakeScreenshotNotification, "screenshot taken"),
+            (UIScreen.capturedDidChangeNotification, "screen capture changed")]
+        for (n, text) in named { nc.addObserver(forName: n, object: nil, queue: nil) { _ in DebugLog.log("system: " + text) } }
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { n in
+            let type = (n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init) == .began ? "began" : "ended"
+            let reason = n.userInfo?[AVAudioSessionInterruptionReasonKey] as? UInt ?? 0
+            DebugLog.log("system: audio interruption \(type) reason \(reason) (call, Siri, alarm, other app audio)")
+        }
+        nc.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: nil) { _ in
+            DebugLog.log("system: thermal state \(ProcessInfo.processInfo.thermalState.rawValue)")
+        }
     }
 
     #if DEBUG

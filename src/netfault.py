@@ -5,6 +5,7 @@ Usage: python src/netfault.py LISTEN_PORT TARGET_PORT "30:reset:10,90:blackhole:
   reset     — close every connection at once and refuse new ones for the given seconds (the server or link is gone).
   blackhole — stop passing bytes in both directions and ignore new connections for the given seconds, then close the
               stuck connections (mobile data that silently stops: no error reaches the client).
+  tarpit    — accept new connections but never answer them (a server that takes the TCP connection and hangs).
 """
 import socket, sys, threading, time
 
@@ -58,6 +59,7 @@ while True:
     c, _ = srv.accept()
     if t0 is None: t0 = time.time(); log('first client')
     m = mode(time.time())
+    if m == 'tarpit': log('tarpit: holding a new connection silently'); conns.append({'dead': False, 'held': [], 'socks': (c,)}); continue
     if m != 'ok': log('refused new connection (', m, ')'); c.close(); continue
     try: u = socket.create_connection(('127.0.0.1', target_port), timeout=3)
     except Exception as e: log('server not ready', e); c.close(); continue

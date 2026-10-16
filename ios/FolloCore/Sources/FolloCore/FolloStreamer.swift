@@ -11,6 +11,13 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
         /// With server acknowledgements: no new acknowledgement for this long while more than 2 windows are unacknowledged
         /// means the network is gone (faster than waiting for the system's send buffer to fill).
         public var ackStallS = 3.0
+        /// A connection that has not reached "publishing" within this time is abandoned and retried (found in the
+        /// 90-min phone run: a server that accepted TCP but never answered the handshake kept the stream down for good).
+        public var connectTimeoutS = 10.0
+        /// Automatic catch-up (found in the 90-min phone run: small Wi-Fi stalls added up to minutes of delay): when the
+        /// stream is more than `autoCatchUpAboveS` behind and the connection has been steady for `steadyS`, send at
+        /// `autoCatchUp` × real time until it is back under 1 s. 1.0 turns it off.
+        public var autoCatchUp = 1.25, autoCatchUpAboveS = 5.0, steadyS = 20.0
         /// Used only when the server sends no acknowledgements: after a drop, resend this much before the last frame the
         /// network stack took (those bytes may still have been in the system's send buffer). Duplicates beat a missed goal.
         public var resendMarginS = 8.0
@@ -43,7 +50,8 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
     private var lastProgressWall = 0.0, lastBytesSent = 0, lastAckCount = 0, lastAckWall = 0.0, ackInterval = 0.0
     private var timer: DispatchSourceTimer?, stopped = false, connecting = false, wantClose = false
     private var everSent = 0                                  // highest global index ever sent (resent frames are counted separately)
-    private var headersSent = false                           // on this connection: a server cannot decode frames before the AVC header
+    private var headersSent = false
+    private var rate = 1.0, publishedAt = 0.0                           // on this connection: a server cannot decode frames before the AVC header
 
     public init(url: String, key: String, config: Config = Config()) { self.url = url; self.key = key; self.config = config }
 
@@ -97,6 +105,10 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
         c.log = { [weak self] m in if m.hasPrefix("FAILED") || m.contains("Publish") { self?.log?("rtmp: " + m) } }
         c.onState = { [weak self, weak c] st in self?.queue.async { if let c, c === self?.client { self?.clientState(st) } } }
         client = c; c.connect(url: url, key: key)
+        queue.asyncAfter(deadline: .now() + config.connectTimeoutS) { [weak self, weak c] in
+            guard let self, let c, c === self.client, !self.isPublishing, !self.stopped else { return }
+            self.dropped("no publish within \(Int(self.config.connectTimeoutS)) s")
+        }
     }
 
     private func clientState(_ st: RTMPClient.State) {
@@ -104,7 +116,7 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
         case .publishing:
             connecting = false; isPublishing = true; headersSent = false
             sendHeadersIfReady()
-            sentTags = []; lastBytesSent = 0; lastProgressWall = now(); lastAckCount = 0; lastAckWall = now(); ackInterval = 0
+            sentTags = []; lastBytesSent = 0; lastProgressWall = now(); lastAckCount = 0; lastAckWall = now(); ackInterval = 0; publishedAt = now()
             // resend from the last keyframe at or before the first frame not surely sent on the previous connection
             let from = max(sendIndex, base)
             if let k = (base..<min(from + 1, base + ring.count)).reversed().first(where: { ring[$0 - base].isKey && ring[$0 - base].kind == .video }) {
@@ -177,7 +189,7 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
             guard sendIndex >= base else { sendIndex = base; anchored = false; continue }
             let it = ring[sendIndex - base]
             if !anchored { anchorWall = t; anchorMs = it.ms; anchored = true }
-            let due = anchorWall + Double(Int64(it.ms) - Int64(anchorMs)) / 1000 / config.catchUp
+            let due = anchorWall + Double(Int64(it.ms) - Int64(anchorMs)) / 1000 / (config.catchUp * rate)
             guard t >= due, c.bytesInFlight < config.maxInFlightBytes else { break }
             let tag = it.kind == .video ? c.sendVideo(it.body, ms: it.ms) : c.sendAudio(it.body, ms: it.ms)
             sentTags.append((sendIndex, tag)); if sentTags.count > 6000 { sentTags.removeFirst(1000) }
@@ -185,6 +197,9 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
             sentFrames += 1; sendIndex += 1
         }
         delayS = backlogS()
+        // automatic catch-up: faster while behind on a steady connection, real time again once caught up
+        let want = config.autoCatchUp > 1 && t - publishedAt > config.steadyS && (rate > 1 ? delayS > 1 : delayS > config.autoCatchUpAboveS) ? config.autoCatchUp : 1.0
+        if want != rate { log?(want > 1 ? "catching up at \(want)× (delay \(String(format: "%.1f", delayS)) s)" : "caught up"); rate = want; anchored = false }
     }
 
     /// Seconds between the newest item and the next one to send.

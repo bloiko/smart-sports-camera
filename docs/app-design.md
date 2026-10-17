@@ -58,6 +58,17 @@ In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position 
 - **Build time and iOS reports.** "Мої матчі" shows the build time. "Звіти iOS" lists MetricKit reports (exit
   reasons, crashes, hangs), each shareable without a cable.
 
+## Half-pitch 1× test mode (2026-10-18)
+
+- A picker before GO LIVE: "Все поле (0,5×)" / "Пів поля (1×, тест)". The choice is saved.
+- The half mode uses the 1× lens: about 1.7× more pixels per player than 0.5×, to compare picture quality on a real
+  match.
+- Only in this mode the position check accepts a far goal corner out of frame. The pitch must still be found and big
+  enough.
+- The log records mode and lens at GO LIVE.
+- UI test `test9_HalfPitchMode`. Its first runs failed only because the app took ~15 s to start on the overloaded Mac
+  (training running); a manual launch works.
+
 ## Scoreboard (2026-10-15, design chosen 2026-10-16)
 
 The stream shows a TV-style score bug in the top left corner of the 1080p picture. Owner's choice among three proposals (`follosim scoreboards DIR` renders them all): a red clock block on the left with the half ("2Т 67:42"), then the full club names with a colour stripe each and the score in a white box. Added time appears as a white "+3" tab under the clock; while the clock is paused the block says "ПЕРЕРВА"; after a "+" a banner "ГОЛ! <club>" in the team colour shows for 6 s under the bug. Red cards (2026-10-16): a small red-card button per team on the live screen (− removes a wrong one), up to 5 cards; on the bug small cards over the club name (`RedCardStyle.above`, chosen by the owner 2026-10-16; `tab`, `count`, `beside` kept for comparison) and a red banner "ЧЕРВОНА КАРТКА <club>" for 6 s. Code: `FolloCore/ScoreboardStyles.swift` (`ScoreStyle.classic`, `fullNames`), app `ScoreViews.swift`.

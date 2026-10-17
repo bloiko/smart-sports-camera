@@ -81,6 +81,9 @@ struct SetupView: View {
     @State var viewers: Int?
     @State var breakFeed = BreakFeed()
     @State var bgTask: UIBackgroundTaskIdentifier = .invalid
+    /// Тест якості (власник, 2026-10-17): об'єктив 1× і лише частина поля. Пікселів на гравця ~1,7× більше, ніж з 0.5×.
+    /// Другі ворота поза кадром, тож лише в цьому режимі перевірка позиції не вимагає обох кутів з воротами.
+    @State var halfPitch = UserDefaults.standard.bool(forKey: "mode.halfPitch")
     @State var onBreak = false
     @State var breakMinutes = 15
     @State var secondHalfAt: Date?                                         // скільки людей дивляться зараз (YouTube, раз на 30 с)
@@ -131,6 +134,7 @@ struct SetupView: View {
             if CommandLine.arguments.contains("--camera") { UserDefaults.standard.removeObject(forKey: "debug.testVideo") }
             if let i = CommandLine.arguments.firstIndex(of: "--streamer"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.streamer") }
             if let n = UserDefaults.standard.string(forKey: "debug.testVideo") { cam.testVideo = CameraSession.testVideos.first { $0.lastPathComponent == n } }
+            if halfPitch { cam.useWide = true }                          // режим «пів поля»: одразу об'єктив 1×
             cam.configure(); UIApplication.shared.isIdleTimerDisabled = true
             ls.calls.onCall = { [ls] active in ls.warning = active ? "Дзвінок: камера на паузі, після дзвінка ефір відновиться сам" : nil }
             // до ефіру: кадри для перевірки позиції (маска поля); під час ефіру: віртуальна камера
@@ -176,7 +180,7 @@ struct SetupView: View {
                let n = Double(CommandLine.arguments[i + 1]), Date().timeIntervalSince(s) >= n { DebugLog.log("auto STOP after \(Int(n)) s"); stop() }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
-                status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (ls.runner.env?.positionProblem.map(Self.ukr) ?? "Поле в кадрі. Можна в ефір") }
+                status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (halfPitch && positionOK ? "Пів поля (1×): видно частину поля, другі ворота поза кадром. Можна в ефір" : ls.runner.env?.positionProblem.map(Self.ukr) ?? "Поле в кадрі. Можна в ефір") }
         }
     }
 
@@ -253,7 +257,14 @@ struct SetupView: View {
         }
         if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
         if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
-        if !cam.isRecording, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
+        if !cam.isRecording {
+            Picker("Режим", selection: Binding(get: { halfPitch }, set: { v in
+                halfPitch = v; UserDefaults.standard.set(v, forKey: "mode.halfPitch")
+                if cam.testVideo == nil { cam.switchCamera(wide: v) }; ls.runner.resetPosition(); DebugLog.log("mode: \(v ? "half pitch, 1×" : "whole pitch, 0.5×")")
+            })) { Text("Все поле (0,5×)").tag(false); Text("Пів поля (1×, тест)").tag(true) }
+                .pickerStyle(.segmented).accessibilityIdentifier("modePicker")
+        }
+        if !cam.isRecording, !halfPitch, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
             Button(cam.useWide ? "Назад до 0.5× (ультраширока)" : "Поле замале → спробувати камеру 1×") {
                 cam.switchCamera(wide: !cam.useWide); ls.runner.resetPosition()
             }.font(.footnote)
@@ -289,7 +300,11 @@ struct SetupView: View {
 
     /// Правило власника: ефір ніколи не стартує, поки не знайдене поле і обидва дальні кути з воротами не в кадрі
     /// (перевірка позиції). Стоїть у самому go(), тож її не обходить ні GO LIVE, ні «Відновити ефір», ні --golive.
-    var positionOK: Bool { ls.runner.env != nil && ls.runner.env?.positionProblem == nil }
+    var positionOK: Bool {
+        guard let e = ls.runner.env else { return false }
+        guard let p = e.positionProblem else { return true }
+        return halfPitch && p.contains("goal")                       // пів поля: лише «ворота біля краю» не заважає
+    }
     /// Тест: тестове відео замість камери або запуск з Mac. Правило власника: у тестах звук ефіру завжди вимкнений.
     var isTest: Bool { cam.testVideo != nil || CommandLine.arguments.contains("--autostart") }
 
@@ -321,7 +336,7 @@ struct SetupView: View {
             ?? MatchRecord(date: start, watchURL: nil, durationS: 0, chunkFiles: [], clipFiles: [], goals: 0, knownPitch: false, folder: folder)
         m.recording = true; MatchStore.upsert(m); match = m
         cam.startRecording(dir: MatchStore.chunksDir(m)); startedAt = start
-        DebugLog.log("recording into matches/\(folder)\(resume ? " (continuing)" : "")")
+        DebugLog.log("recording into matches/\(folder)\(resume ? " (continuing)" : ""), mode \(halfPitch ? "half pitch 1×" : "whole pitch 0.5×"), lens \(cam.useWide ? "1×" : "0.5×")")
         // віртуальна камера: кроп 1920×1080 із затримкою 2 с → стрімер (і «погляд глядача», пункт 10)
         ls.runner.onOutput = { [ls, breakFeed] pb, t in Task { @MainActor in guard !breakFeed.active else { return }; ls.streamer.push(pb, at: breakFeed.adjust(t)) } }
         do { try ls.runner.start() } catch { self.error = "Камера: \(error.localizedDescription) (моделі players/ball.mlmodelc у проєкті?)" }

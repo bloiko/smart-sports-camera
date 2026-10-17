@@ -293,4 +293,19 @@ final class FolloUITests: XCTestCase {
     func test8b_BackgroundTripKeepsConnection() {
         XCTAssertEqual(backgroundTrip(extra: []), 0, "a 5 s trip to the background must not cost a reconnect")
     }
+
+    /// Owner (2026-10-17): a 1× "half pitch" mode to compare picture quality. Only in this mode the second goal may be
+    /// out of frame; the pitch itself must still be found.
+    func test9_HalfPitchMode() {
+        let picker = app.segmentedControls["modePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        picker.buttons["Пів поля (1×, тест)"].tap()
+        let go = app.buttons["goLive"]
+        wait("pitch found in half mode", timeout: 300) { go.isEnabled }
+        XCTAssertTrue(app.staticTexts["status"].label.hasPrefix("Пів поля"), app.staticTexts["status"].label)
+        allInsideScreen("half-pitch setup")
+        shot("70 half pitch mode")
+        picker.buttons["Все поле (0,5×)"].tap()                              // back to the normal mode for the next tests
+        XCTAssertTrue(picker.buttons["Все поле (0,5×)"].isSelected)
+    }
 }

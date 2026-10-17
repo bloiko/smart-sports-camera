@@ -671,3 +671,18 @@ next to today's ball model:
   model.
 - **Still to solve on the phone.** The input needs crops of frames t-1 and t-2: keep the last two ROI-sized crops (or
   two frames) and build the 13-channel input with Accelerate. That is a few ms of CPU, to be measured in Swift.
+
+**Ablation: no background channel (2026-10-17).** Same training (m1+m2, 25 epochs); YOLO at 0.4:
+
+| Part | Recall: YOLO / full / **nobg** | Interpolated | Wrong spot | Spare-ball false alarms | Player false alarms |
+| --- | --- | --- | --- | --- | --- |
+| m1 last 20% | 0.79 / 0.84 / 0.81 | 0.76 / 0.81 / 0.77 | 0.07 / 0.07 / 0.08 | 0.90 / 0.00 / 0.00 | 0.08 / 0.08 / — |
+| m2 last 20% | 0.71 / 0.72 / **0.75** | 0.69 / 0.69 / 0.73 | 0.12 / 0.13 / 0.12 | — | 0.10 / 0.03 / 0.00 |
+| m3 last 20% | 0.13 / 0.41 / **0.50** | 0.11 / 0.39 / 0.46 | 0.07 / 0.27 / 0.25 | 0.40 / 0.04 / 0.02 | 0.09 / 0.06 / 0.00 |
+| m3 all (unseen) | 0.23 / 0.46 / **0.54** | 0.21 / 0.44 / 0.51 | 0.10 / 0.20 / 0.21 | 0.43 / 0.03 / 0.01 | 0.06 / 0.07 / 0.03 |
+
+- The background channel does not help, not even on the unseen stadium; without it the network is equal or better.
+- Spare balls are rejected by the 3 frames alone: a still ball does not move.
+- For the phone this is simpler: 10 input channels instead of 13, and no median frame to keep.
+- Still open: about a fifth of the hits on m3 are more than 4 px off. The noprior run tells whether a wrong tracker
+  prior causes it.

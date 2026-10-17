@@ -9,6 +9,8 @@ import FolloCore
 final class LiveCameraRunner {
     let bufferS = 2.0
     private(set) var env: LiveEnv?
+    /// What the position check found, drawn over the preview ("Що бачить застосунок"); computed once with the env.
+    private(set) var positionOverlay: PositionOverlay?
     private var pipe: LivePipeline?, cam: LiveCamera?
     private var ring: [Int: (CVPixelBuffer, CMTime)] = [:]
     private var ringPool: CVPixelBufferPool?, outPool: CVPixelBufferPool?
@@ -32,7 +34,7 @@ final class LiveCameraRunner {
 
     /// Position check: call with a frame every ~1.5 s while the setup screen is open (7 frames over 10 s).
     /// Half-resolution median of the last 7 frames → field mask, image bounds, halfway line.
-    func resetPosition() { preroll.removeAll(); prerollCount = 0; env = nil; building = false }
+    func resetPosition() { preroll.removeAll(); prerollCount = 0; env = nil; positionOverlay = nil; building = false }
 
     func addPrerollFrame(_ pb: CVPixelBuffer, time: Double) {
         guard env == nil, !building, !prerollBusy, preroll.last.map({ time - $0.0 >= 1.4 }) ?? true else { return }   // після 7 кадрів нічого не рендеримо
@@ -64,7 +66,8 @@ final class LiveCameraRunner {
                 let t0 = Date()
                 let e = Self.envScale == 1 ? LiveEnv.make(frames: frames, fps: f) : LiveEnv.make(frames: frames, fps: f).scaled(Self.envScale)
                 DebugLog.log("env build done in \(Int(Date().timeIntervalSince(t0) * 1000)) ms mem \(DebugLog.memMB()): \(e.positionProblem ?? "ok")")
-                DispatchQueue.main.async { self?.env = e; self?.building = false }
+                let ov = e.positionOverlay()
+                DispatchQueue.main.async { self?.env = e; self?.positionOverlay = ov; self?.building = false }
             }
         }
     }

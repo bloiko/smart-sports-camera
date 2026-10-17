@@ -18,6 +18,8 @@ final class FolloEngine: @unchecked Sendable {        // state on `q`
     var isPublishing: Bool { streamer?.isPublishing ?? false }
     var reconnects: Int { streamer?.reconnects ?? 0 }
     var delayS: Double { streamer?.delayS ?? 0 }
+    /// Bytes YouTube acknowledged on this connection (BitrateAdvisor input).
+    var ackedBytes: Int { streamer?.ackedBytes ?? 0 }
     /// Mute button: the microphone is replaced by silence; the audio track keeps running (YouTube expects it).
     var muted = false
 

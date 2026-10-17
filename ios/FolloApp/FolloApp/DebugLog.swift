@@ -36,5 +36,13 @@ enum DebugLog {
         return r == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1
     }
 
-    static func reset() { try? FileManager.default.removeItem(at: dir.appendingPathComponent("log.txt")); log("app start \(UIDevice.current.systemVersion)") }
+    static func reset() { try? FileManager.default.removeItem(at: dir.appendingPathComponent("log.txt")); log("app start \(UIDevice.current.systemVersion), build \(build)") }
+
+    /// Which build runs on the phone: the time the app binary was built ("17.10 01:20"), shown in the log and on
+    /// "Мої матчі" (the version number stays 1.0 (1) during development).
+    static let build: String = {
+        let d = Bundle.main.executableURL.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date }
+        let f = DateFormatter(); f.dateFormat = "dd.MM HH:mm"
+        return d.map { f.string(from: $0) } ?? "?"
+    }()
 }

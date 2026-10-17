@@ -128,10 +128,10 @@ struct ScoreBar: View {
         let t = home ? score.state.home : score.state.away, n = home ? score.state.homeGoals : score.state.awayGoals
         return VStack(spacing: 4) {
             HStack(spacing: 6) { Circle().fill(Color(red: t.r, green: t.g, blue: t.b)).frame(width: 12, height: 12); Text(t.name).font(.caption).lineLimit(1) }
-            HStack(spacing: 8) {
-                Button { score.add(home: home, -1) } label: { Image(systemName: "minus").frame(width: 36, height: 36) }.buttonStyle(.bordered)
-                Text("\(n)").font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit().frame(minWidth: 34)
-                Button { score.add(home: home, 1) } label: { Image(systemName: "plus").frame(width: 36, height: 36) }.buttonStyle(.borderedProminent)
+            HStack(spacing: 6) {                                                // вужче: на iPhone панель виходила за край екрана
+                Button { score.add(home: home, -1) } label: { Image(systemName: "minus").frame(width: 32, height: 36) }.buttonStyle(.bordered)
+                Text("\(n)").font(.system(size: 30, weight: .heavy, design: .rounded)).monospacedDigit().frame(minWidth: 30)
+                Button { score.add(home: home, 1) } label: { Image(systemName: "plus").frame(width: 32, height: 36) }.buttonStyle(.borderedProminent)
             }
             let red = home ? score.state.homeRed : score.state.awayRed
             HStack(spacing: 6) {                                               // червоні картки: + і − поруч, щоб виправити помилку

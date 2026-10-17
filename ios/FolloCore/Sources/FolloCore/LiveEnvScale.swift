@@ -61,3 +61,80 @@ extension Mask {
         return (Double(L[Int(Double(L.count - 1) * 0.1)]), Double(R[Int(Double(R.count - 1) * 0.9)]))
     }
 }
+
+/// "Що бачить застосунок" (owner, 2026-10-17): what the position check found, to draw over the preview before GO LIVE.
+/// Coordinates are in full-frame pixels; `mask` is the pitch shrunk to at most `maxWidth` px for drawing.
+public struct PositionOverlay: Sendable {
+    public let w: Int, h: Int
+    public let maskW: Int, maskH: Int, mask: [UInt8]
+    /// Far quarter of the pitch (where the goals stand): left and right ends, rows.
+    public let farLeft: Double, farRight: Double, farTop: Double, farBottom: Double
+    /// The far corners must stay this far from the frame edges.
+    public let margin: Double
+    public var leftOK: Bool { farLeft >= margin }
+    public var rightOK: Bool { farRight <= Double(w - 1) - margin }
+}
+
+extension LiveEnv {
+    public func positionOverlay(maxWidth: Int = 320) -> PositionOverlay? {
+        guard let fm = fm, let band = fm.farBandRows else { return nil }
+        let k = max(1, Int((Double(fm.w) / Double(maxWidth)).rounded(.up)))
+        let mw = fm.w / k, mh = fm.h / k
+        var small = [UInt8](repeating: 0, count: mw * mh)
+        for y in 0..<mh { for x in 0..<mw where fm.data[(y * k) * fm.w + x * k] != 0 { small[y * mw + x] = 1 } }
+        return PositionOverlay(w: fm.w, h: fm.h, maskW: mw, maskH: mh, mask: small, farLeft: band.l, farRight: band.r,
+                               farTop: Double(band.y0), farBottom: Double(band.y1), margin: Double(fm.w) / 33)
+    }
+}
+
+extension Mask {
+    /// `farBand` with the rows it was measured on (for drawing).
+    public var farBandRows: (l: Double, r: Double, y0: Int, y1: Int)? {
+        guard let (l, r) = farBand else { return nil }
+        let minCount = max(1, w / 20)
+        var y0 = -1, y1 = -1
+        for y in 0..<h { var c = 0; for x in 0..<w where data[y * w + x] != 0 { c += 1 }; if c >= minCount { if y0 < 0 { y0 = y }; y1 = y } }
+        return (l, r, y0, y0 + max(1, (y1 - y0) / 4))
+    }
+}
+
+#if canImport(CoreGraphics)
+import CoreGraphics
+extension PositionOverlay {
+    /// Draws into `rect` (the frame as shown, y pointing down): everything outside the pitch dimmed, the far-corner zones and
+    /// both corners — green when inside, red when too close to the edge (turn the phone that way). Shared by the app
+    /// (Canvas over the preview) and `follosim overlay` (PNG on the Mac).
+    public func draw(in c: CGContext, rect: CGRect) {
+        let sx = rect.width / CGFloat(w), sy = rect.height / CGFloat(h)
+        func P(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: rect.minX + CGFloat(x) * sx, y: rect.minY + CGFloat(y) * sy) }
+        // everything that is NOT the pitch is dimmed (a green tint is invisible on grass): one rect per run per row
+        c.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.55))
+        let kx = Double(w) / Double(maskW), ky = Double(h) / Double(maskH)
+        for y in 0..<maskH {
+            var x = 0
+            while x < maskW {
+                guard mask[y * maskW + x] == 0 else { x += 1; continue }
+                let x0 = x; while x < maskW, mask[y * maskW + x] == 0 { x += 1 }
+                let a = P(Double(x0) * kx, Double(y) * ky), b = P(Double(x) * kx, Double(y + 1) * ky)
+                c.fill(CGRect(x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y))
+            }
+        }
+        // edge zones of the far band where a goal corner must not be
+        let red = CGColor(red: 1, green: 0.2, blue: 0.2, alpha: 1), green = CGColor(red: 0.2, green: 1, blue: 0.3, alpha: 1)
+        for (x0, ok) in [(0.0, leftOK), (Double(w) - margin, rightOK)] {
+            c.setFillColor(ok ? CGColor(red: 1, green: 1, blue: 1, alpha: 0.10) : CGColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.35))
+            let a = P(x0, farTop), b = P(x0 + margin, farBottom); c.fill(CGRect(x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y))
+        }
+        // far band outline and the two corners (where the goals stand)
+        let lw = max(2, rect.width / 300)
+        c.setLineWidth(lw); c.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.7))
+        let t = P(farLeft, farTop), u = P(farRight, farBottom); c.stroke(CGRect(x: t.x, y: t.y, width: u.x - t.x, height: u.y - t.y))
+        let r = max(6, rect.width / 60)
+        for (x, ok) in [(farLeft, leftOK), (farRight, rightOK)] {
+            let p = P(x, (farTop + farBottom) / 2)
+            c.setFillColor(ok ? green : red); c.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+            c.setStrokeColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.8)); c.strokeEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+        }
+    }
+}
+#endif

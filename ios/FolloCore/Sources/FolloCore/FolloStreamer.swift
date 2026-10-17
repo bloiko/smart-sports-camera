@@ -38,6 +38,8 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
     public var diag: String { queue.sync { "ring \(ring.count) next \(sendIndex - base) pushed \(base + ring.count) sent \(sentFrames) inflight \(client?.bytesInFlight ?? 0)" } }
     /// Seconds the stream runs behind live (0 when it keeps up).
     public private(set) var delayS = 0.0
+    /// Bytes the server has acknowledged on the current connection (restarts at 0 on reconnect): BitrateAdvisor input.
+    public var ackedBytes: Int { (queue.sync { client })?.ackState().acked ?? 0 }
 
     let queue = DispatchQueue(label: "follo.streamer")
     private let url: String, key: String

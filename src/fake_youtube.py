@@ -4,7 +4,8 @@ Stage 1 of docs/youtube-signin-and-ui-test-plan.md. Imitates the calls Follo mak
 - OAuth: GET /auth (redirects straight back with a code), POST /token (code or refresh grant);
 - YouTube Data API v3: channels, liveStreams (list/insert), liveBroadcasts (list/insert/update/bind/transition).
 
-Every request is recorded; GET /_log returns them as JSON, POST /_reset clears the state.
+Every request is recorded; GET /_log returns them as JSON, POST /_reset clears the state, POST /_fail?n=N makes the
+next N YouTube calls fail with 503, POST /_revoke makes refresh tokens invalid (sign-in expired).
 The ingest address handed out points at a local RTMP receiver (default rtmp://127.0.0.1:1935/live2).
 
 Usage: python src/fake_youtube.py [--port 8765] [--ingest rtmp://127.0.0.1:1935/live2]
@@ -22,7 +23,7 @@ STATE = {}
 
 def reset(ingest):
     STATE.clear()
-    STATE.update(log=[], streams={}, broadcasts={}, tokens=set(), refresh=set(), n=0, ingest=ingest)
+    STATE.update(log=[], streams={}, broadcasts={}, tokens=set(), refresh=set(), n=0, ingest=ingest, fail=0, revoked=False)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -55,6 +56,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/_reset":
                 reset(STATE["ingest"])
                 return self.send(200, {})
+            if u.path == "/_fail":                 # the next N YouTube calls answer 503 (YouTube or the network is down)
+                STATE["fail"] = int(q.get("n", "1"))
+                return self.send(200, {})
+            if u.path == "/_revoke":               # refresh tokens stop working (the 7-day Testing limit, or revoked access)
+                STATE["revoked"] = True
+                return self.send(200, {})
             STATE["log"].append({"method": method, "path": u.path, "query": q, "body": body, "form": {k: v for k, v in form.items() if k != "code_verifier"}})
             if u.path == "/auth":
                 loc = q["redirect_uri"] + "?" + urlencode({"code": "fake-code", "state": q.get("state", "")})
@@ -63,6 +70,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.token(form)
             if not u.path.startswith("/youtube/v3/"):
                 return self.error(404, "notFound", u.path)
+            if STATE["fail"] > 0:
+                STATE["fail"] -= 1
+                return self.error(503, "backendError", "Backend Error")
             if (self.headers.get("Authorization") or "").replace("Bearer ", "") not in STATE["tokens"]:
                 return self.error(401, "authError", "Invalid Credentials")
             return self.api(method, u.path[len("/youtube/v3/"):], q, body or {})
@@ -78,6 +88,8 @@ class Handler(BaseHTTPRequestHandler):
             STATE["tokens"].add(access)
             return self.send(200, {"access_token": access, "expires_in": 3599, "refresh_token": refresh, "token_type": "Bearer"})
         if form.get("grant_type") == "refresh_token":
+            if STATE["revoked"]:
+                return self.send(400, {"error": "invalid_grant", "error_description": "Token has been expired or revoked."})
             if form.get("refresh_token") not in STATE["refresh"] and not form.get("refresh_token", "").startswith("test-"):
                 return self.send(400, {"error": "invalid_grant"})
             STATE["tokens"].add(access)
@@ -88,6 +100,9 @@ class Handler(BaseHTTPRequestHandler):
         streams, broadcasts = STATE["streams"], STATE["broadcasts"]
         if path == "channels" and method == "GET":
             return self.send(200, {"items": [{"id": "UCfake", "snippet": {"title": "Test channel"}}]})
+        if path == "videos" and method == "GET":
+            b = broadcasts.get(q.get("id"))
+            return self.send(200, {"items": [{"id": b["id"], "liveStreamingDetails": {"concurrentViewers": "3"}}] if b else []})
         if path == "liveStreams" and method == "GET":
             s = streams.get(q.get("id"))
             return self.send(200, {"items": [s] if s else []})

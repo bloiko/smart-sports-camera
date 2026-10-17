@@ -573,3 +573,18 @@ Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measu
 
 - m2 test video from the iPhone 15 with `--streamer follo` to `rtmps://a.rtmps.youtube.com/live2` (Studio stream key): YouTube answered `NetStream.Publish.Start` on the first connection; 200 s with encoder in = out, 0 drops, 0 errors, nothing in flight (YouTube acknowledges everything), memory ~760 MB, thermal ok.
 - Restarted twice (relaunch, new build): publishes again within 1 s of GO LIVE.
+
+## Bitrate from what the server acknowledges (2026-10-17, Mac)
+
+`follosim stream … --adaptive` through `src/netfault.py` limited to 2.5 Mbit/s (`0:throttle2500:900`), match 2 from 20 s:
+
+| Run | Bitrate | Delay behind live | Frames |
+| --- | --- | --- | --- |
+| Before (fixed 4.5 Mbit/s), 120 s | 4500 | 4.7 s at 30 s, 18.8 at 60 s, 56 at 115 s, growing | 62 lost at the end (drain ran out) |
+| After, first version (steps 4500/3000/2000/1200, 80% of a 10 s window) | 4500 → 1200 at 10 s → 2000 at 150 s | 0.1 s from 45 s | all 5458 delivered |
+| After, measurement between acknowledgement arrivals, steps 4500/3500/2500/1800/1200 | 4500 → 1200 at 15 s → 1800 at 155 s | 1.0 s (the catch-up floor) from 60 s | all delivered |
+| Control: no throttle, advisor on, 120 s | 4500, no change | 0.0 s | all delivered |
+
+Found on the way: the server acknowledges in large windows (ffmpeg: several MB), so a 10 s window sometimes held
+no acknowledgement and "measured" 1 Mbit/s on a 2.5 Mbit/s link. The rate is now taken between acknowledgement
+arrivals over up to 30 s. "Steady" is a delay under 1.5 s, because automatic catch-up stops at 1 s.

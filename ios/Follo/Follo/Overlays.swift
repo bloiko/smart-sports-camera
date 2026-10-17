@@ -10,6 +10,7 @@ struct DimOverlay: View {
     var body: some View {
         let dim = now.timeIntervalSince(lastTouch) > 60          // власник: 10 с — замало, хвилина
         Color.black.opacity(dim ? 0.97 : 0).ignoresSafeArea().allowsHitTesting(dim)
+            .accessibilityElement().accessibilityIdentifier(dim ? "dimmed" : "notDimmed")
             .onTapGesture { lastTouch = Date() }
             .onReceive(ticker) { now = $0 }
             .animation(.easeInOut(duration: 0.5), value: dim)

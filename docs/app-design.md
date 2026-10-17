@@ -33,6 +33,31 @@ In code (not run on a phone yet): 1 (placeholder sign-in), 2, 3, 4, 5 (position 
 - "Звук" button next to "Погляд глядача": mutes the stream (silence replaces the microphone; the audio track keeps running, YouTube expects it). Works on both engines. The 4K recording has no audio.
 - Touches for the 60 s dimming are counted by a window-level recognizer that never takes touches away from scrolling.
 
+## Match-day changes (2026-10-17)
+
+- **GO LIVE starts the recording and the virtual camera at once.** The YouTube broadcast connects separately and
+  retries every 10 s. An expired sign-in or a YouTube error never stops the recording; the status line says what is
+  happening.
+- **Broadcast title** from the scoreboard teams: "Динамо – Шахтар, 17.10" ("Матч 17.10 11:00" without names).
+- **Sign-in check on launch.** "Мої матчі" shows "Вхід у YouTube скінчився — Увійти знову" at home, and a warning the
+  day before the 7-day Testing limit. Onboarding's "Увійти через Google" now signs in for real.
+- **Landscape** (phone on the tripod): preview on the left, controls on the right with scrolling, GO LIVE / STOP
+  under them. A UI test checks that the window really rotates and that every control is reachable.
+- **"Що бачить застосунок":**
+  - before GO LIVE the preview dims everything that is not pitch;
+  - it outlines the far quarter of the pitch;
+  - both far corners where the goals stand are marked green, or red when too close to the edge;
+  - position hints are in Ukrainian ("поверни телефон трохи вліво").
+- **Viewers:** an eye with the number of people watching, next to the visibility, every 30 s.
+- **Slow upload:** the own stream engine measures what YouTube acknowledges and steps the bitrate down
+  (4.5/3.5/2.5/1.8/1.2 Mbit/s), then probes up after 2 steady minutes. The screen shows "Слабкий інтернет (≈2.1
+  Мбіт/с): ефір 1.8 Мбіт/с".
+- **Half-time:** "Перерва" puts a card with the clubs, the score and "Другий тайм о HH:MM" in the stream. It pauses
+  the clock and turns off the camera, the recording and detection, so the phone cools down. "Другий тайм" turns
+  everything back on, puts the clock at 2Т 45:00 and continues the recording in the same match folder.
+- **Build time and iOS reports.** "Мої матчі" shows the build time. "Звіти iOS" lists MetricKit reports (exit
+  reasons, crashes, hangs), each shareable without a cable.
+
 ## Scoreboard (2026-10-15, design chosen 2026-10-16)
 
 The stream shows a TV-style score bug in the top left corner of the 1080p picture. Owner's choice among three proposals (`follosim scoreboards DIR` renders them all): a red clock block on the left with the half ("2Т 67:42"), then the full club names with a colour stripe each and the score in a white box. Added time appears as a white "+3" tab under the clock; while the clock is paused the block says "ПЕРЕРВА"; after a "+" a banner "ГОЛ! <club>" in the team colour shows for 6 s under the bug. Red cards (2026-10-16): a small red-card button per team on the live screen (− removes a wrong one), up to 5 cards; on the bug small cards over the club name (`RedCardStyle.above`, chosen by the owner 2026-10-16; `tab`, `count`, `beside` kept for comparison) and a red banner "ЧЕРВОНА КАРТКА <club>" for 6 s. Code: `FolloCore/ScoreboardStyles.swift` (`ScoreStyle.classic`, `fullNames`), app `ScoreViews.swift`.

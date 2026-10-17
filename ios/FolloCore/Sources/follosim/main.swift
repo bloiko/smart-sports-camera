@@ -151,7 +151,7 @@ case "encode":   // follosim encode VIDEO PATH.json OUT.mp4 [--from S] [--second
     let gaps = zip(keys.dropFirst(), keys).map { $0 - $1 }
     if args.contains("--per-second") { log("per-second kbit/s: " + perSecond.map { "\(Int($0))" }.joined(separator: " ")) }
     log("encoded \(sizes.count)/\(n) frames (dropped \(enc.dropped)) in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s; average \(Int(kbps)) kbit/s (target \(es.bitrate / 1000)); per-second max \(Int(perSecond.max() ?? 0)) min \(Int(perSecond.min() ?? 0)); keyframes at \(keys.prefix(6))…, gaps \(Set(gaps).sorted()); latency median \(Int(Stats.percentile(latency, 50) * 1000)) ms p95 \(Int(Stats.percentile(latency, 95) * 1000)) ms → \(args[4])")
-case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SENT.flv [--from S] [--seconds N] [--capacity C] [--catchup F] [--insecure-tls]
+case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SENT.flv [--from S] [--seconds N] [--capacity C] [--catchup F] [--insecure-tls] [--adaptive]
     // Stage 1d: real-time encode → FolloStreamer (ring buffer + reconnect) → RTMP. SENT.flv holds every frame produced.
     func log(_ t: String) { FileHandle.standardError.write(("\(String(format: "%7.1f", ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 100000))) " + t + "\n").data(using: .utf8)!) }
     func arg(_ k: String) -> String? { args.firstIndex(of: k).map { args[$0 + 1] } }
@@ -203,6 +203,7 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
     let ctx = CIContext(options: [.cacheIntermediates: false]); var pool: CVPixelBufferPool?
     CVPixelBufferPoolCreate(nil, nil, [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 1920,
                                        kCVPixelBufferHeightKey as String: 1080, kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &pool)
+    let adaptive = args.contains("--adaptive"); var advisor = BitrateAdvisor()      // bitrate from what the server acknowledges
     st.start(); try! reader.start(from: f0); let t0 = Date()
     for i in 0..<n {
         let more: Bool = autoreleasepool {
@@ -217,6 +218,9 @@ case "stream":   // follosim stream VIDEO PATH.json --rtmp URL --key K --sent SE
             enc.encode(o!, pts: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps.rounded())))
             if let e = ae { while nextChunk < pcmChunks.count && pcmChunks[nextChunk].0 < Double(i + 1) / fps { e.append(pcmChunks[nextChunk].1); nextChunk += 1 } }
             if let j = arg("--kill-encoder-at").map({ Int(Double($0)! * fps) }), i == j { log("test: invalidating the encoder session"); enc.simulateInvalidation() }
+            if adaptive, i % Int(fps.rounded()) == 0, let k = advisor.update(t: Double(i) / fps, ackedBytes: st.ackedBytes, delayS: st.delayS) {
+                enc.setBitrate(k * 1000); log(String(format: "bitrate → %d kbit/s (measured %.0f, delay %.1f s)", k, advisor.measuredKbps ?? 0, st.delayS))
+            }
             if let j = arg("--jump-at").map({ Int(Double($0)! * fps) }), i == j { log("jump to live (delay was \(String(format: "%.1f", st.delayS)) s)"); st.jumpToLive() }
             if i % Int(5 * fps) == 0 { log(String(format: "t=%3.0f s publishing %@ delay %.1f s reconnects %d ring %.1f MB (peak %.1f) resent %d dropped-from-ring %d", Double(i) / fps, st.isPublishing ? "yes" : "NO ", st.delayS, st.reconnects, Double(st.ringBytes) / 1e6, Double(st.ringPeakBytes) / 1e6, st.resentFrames, st.droppedFromRing)) }
             return true
@@ -310,6 +314,7 @@ case "youtube":   // follosim youtube --api http://127.0.0.1:8765 — stage 1: o
             do { _ = try await api.createBroadcast(title: "x", privacy: .public); check(false, "public broadcast in a debug build") } catch YouTubeAPI.APIError.publicNotAllowed { check(true, "debug build refuses a public broadcast") }
             check(try await api.setPrivacy(b.id, .private).privacy == "private", "unlisted → private")
             check(try await api.setPrivacy(b.id, .unlisted).privacy == "unlisted", "private → unlisted")
+            check(try await api.viewers(b.id) == 3, "viewers now")
             try await api.complete(b.id)
             let (b3, s3) = try await api.prepare(streamId: s.id, resumeBroadcastId: b.id, title: "Follo test 2", privacy: .unlisted)
             check(b3.id != b.id && s3 == s, "after STOP the next match gets a new broadcast on the same stream")
@@ -351,6 +356,12 @@ case "scoreboards":   // follosim scoreboards DIR — every style in four states
         CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst)
     }
     print("written to \(args[2])")
+case "breakcard":   // follosim breakcard OUT.png — the half-time card the stream shows instead of the camera
+    var st = ScoreState(); st.home = ScoreTeam(name: "ФК Динамо Київ", r: 1, g: 1, b: 1); st.away = ScoreTeam(name: "Шахтар", r: 1, g: 0.55, b: 0)
+    st.homeGoals = 1; st.awayGoals = 0
+    let img = Scoreboard.breakCard(st, line: "Другий тайм о 11:55")!
+    let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(dst, img, nil); CGImageDestinationFinalize(dst); print("wrote \(args[2]) \(img.width)×\(img.height)")
 case "scoreboard":   // follosim scoreboard OUT.png — the score bug as the stream shows it (for a look on the Mac)
     var st = ScoreState(home: ScoreTeam(name: "Tsukuba", r: 0.95, g: 0.95, b: 0.95), away: ScoreTeam(name: "Kyiv United FC", r: 0.1, g: 0.35, b: 0.9))
     st.homeGoals = 2; st.awayGoals = 1
@@ -361,6 +372,27 @@ case "position":   // follosim position work/mN/live_pre — the Go live positio
     let e = try LiveEnv.load(dir: args[2])
     let fb = e.fm?.farBand
     print("far band \(fb.map { "\(Int($0.0))..\(Int($0.1)) of \(e.W)" } ?? "none"): \(e.positionProblem ?? "ok")")
+case "overlay":   // follosim overlay work/mN/live_pre OUT.png [--shift PX] — "Що бачить застосунок": the position overlay on the median frame
+    var e = try LiveEnv.load(dir: args[2])
+    let shift = args.firstIndex(of: "--shift").map { Int(args[$0 + 1])! } ?? 0      // pretend the phone is turned: pitch moves right
+    if shift != 0, let fm = e.fm {
+        var m = Mask(w: fm.w, h: fm.h)
+        for y in 0..<fm.h { for x in 0..<fm.w where x - shift >= 0 && x - shift < fm.w { m.data[y * fm.w + x] = fm.data[y * fm.w + x - shift] } }
+        e.fm = m
+    }
+    guard let ov = e.positionOverlay() else { die("no pitch") }
+    let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: args[2] + "/med.png") as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+    let W = 1600, H = Int(Double(W) * Double(ov.h) / Double(ov.w))
+    let ctx = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.translateBy(x: 0, y: CGFloat(H)); ctx.scaleBy(x: 1, y: -1)                 // y down, as in the app
+    if let src {
+        ctx.saveGState(); ctx.translateBy(x: CGFloat(shift) * CGFloat(W) / CGFloat(ov.w), y: CGFloat(H)); ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(src, in: CGRect(x: 0, y: 0, width: W, height: H)); ctx.restoreGState()
+    }
+    ov.draw(in: ctx, rect: CGRect(x: 0, y: 0, width: W, height: H))
+    let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[3]) as CFURL, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(dst, ctx.makeImage()!, nil); CGImageDestinationFinalize(dst)
+    print("far band \(Int(ov.farLeft))..\(Int(ov.farRight)) of \(ov.w), margin \(Int(ov.margin)): left \(ov.leftOK ? "ok" : "OUT"), right \(ov.rightOK ? "ok" : "OUT"); problem: \(e.positionProblem ?? "none")")
 case "envq":       // follosim envq VIDEO DIR K — the environment as the phone builds it: 7 frames downscaled K× (box), then scaled(K)
     let reader = try! VideoReader(path: args[2]); let k = Int(args[4])!
     try! reader.start(); let n = min(reader.frames, Int(LiveEnv.prerollS * reader.fps))

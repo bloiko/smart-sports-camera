@@ -3,6 +3,7 @@ import Combine
 import AVFoundation
 import HaishinKit        // SPM: https://github.com/HaishinKit/HaishinKit.swift (BSD-3), 2.x
 import RTMPHaishinKit    // RTMP lives in its own module since 2.0
+import FolloCore
 
 /// RTMPS-стрім 1080p на YouTube з буфером і перепідключенням до тієї самої трансляції.
 /// Кадри (CVPixelBuffer 1920×1080 після віртуальної камери) надходять у push(); аудіо — з мікрофона через MediaMixer.
@@ -40,7 +41,11 @@ final class Streamer: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var statusTask: Task<Void, Never>?
     private var fps = 30.0
-    private let bitrateSteps = [4500, 3000, 2000]        // кбіт/с; 2000 → 720p
+    private let bitrateSteps = BitrateAdvisor.steps       // кбіт/с; HaishinKit: ≤ 2000 → 720p
+    /// Own engine: bitrate from what YouTube acknowledges (slow upload → lower bitrate, no growing delay).
+    private var advisor = BitrateAdvisor()
+    /// Measured upload when the link is the limit (shown on the live screen), kbit/s.
+    @Published var limitedKbps: Int?
 
     func start(url: String, key: String) async {
         if Self.engine == .follo { startFollo(url: url, key: key); return }
@@ -146,12 +151,25 @@ final class Streamer: ObservableObject {
 
     private func startFollo(url: String, key: String) {
         let f = FolloEngine()
+        // start where the last stream ended if that was on a slow link less than 2 h ago (same pitch, same network)
+        if let k = UserDefaults.standard.object(forKey: "stream.lastKbps") as? Int, let at = UserDefaults.standard.object(forKey: "stream.lastKbpsAt") as? Date,
+           Date().timeIntervalSince(at) < 7200, k < bitrateKbps { bitrateKbps = k; DebugLog.log("stream: starting at \(k) kbit/s (slow link last time)") }
+        advisor = BitrateAdvisor(startKbps: bitrateKbps)
         do { try f.start(url: url, key: key, bitrate: bitrateKbps * 1000, fps: fps) } catch { DebugLog.log("engine follo failed: \(error)"); state = .ended; return }
         follo = f; f.muted = muted; state = .connecting
         folloPoll = Task { [weak self] in                                   // the engine runs on its own queues; mirror its state here
+            var tick = 0
             while let self, !Task.isCancelled, self.state != .ended {
                 self.state = f.isPublishing ? .live : (f.reconnects > 0 ? .reconnecting(attempt: f.reconnects) : .connecting)
                 self.delayS = f.delayS
+                tick += 1
+                if tick % 2 == 0, f.isPublishing, let k = self.advisor.update(t: ProcessInfo.processInfo.systemUptime, ackedBytes: f.ackedBytes, delayS: f.delayS) {
+                    let m = Int(self.advisor.measuredKbps ?? 0)
+                    DebugLog.log("stream: bitrate \(self.bitrateKbps) → \(k) kbit/s (YouTube receives ≈ \(m), delay \(String(format: "%.1f", f.delayS)) s)")
+                    self.bitrateKbps = k; f.setBitrate(k * 1000)
+                    self.limitedKbps = k < BitrateAdvisor.steps[0] ? m : nil
+                    UserDefaults.standard.set(k, forKey: "stream.lastKbps"); UserDefaults.standard.set(Date(), forKey: "stream.lastKbpsAt")
+                }
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }

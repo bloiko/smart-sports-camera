@@ -182,6 +182,16 @@ final class CameraSession: NSObject, ObservableObject {
         }
     }
 
+    /// Перерва: закрити поточний файл і не писати, але лишитись «в ефірі» (isRecording тримає екран ефіру).
+    func pauseRecording() { queue.async { self.writer?.finish(); self.writer = nil; DebugLog.log("recording paused (break)") } }
+    /// Другий тайм: нові файли в ту саму папку матчу (нумерація продовжується).
+    func resumeRecording(dir: URL) {
+        queue.async {
+            self.writer = ChunkWriter(dir: dir, chunkSeconds: self.chunkSeconds) { n in DispatchQueue.main.async { self.chunkCount = n } }
+            DebugLog.log("recording resumed")
+        }
+    }
+
     func stopRecording() {
         queue.async {
             self.writer?.finish(); self.writer = nil

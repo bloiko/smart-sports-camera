@@ -101,6 +101,14 @@ public final class YouTubeAPI: @unchecked Sendable {
         return b
     }
 
+    /// People watching now (YouTube's live counter; nil before the broadcast is live or when YouTube hides it).
+    /// One quota unit per call: every 30 s over 90 minutes is 180 of the 10 000 daily units.
+    public func viewers(_ id: String) async throws -> Int? {
+        let j = try await call("GET", "videos?part=liveStreamingDetails&id=\(id)")
+        let d = ((j["items"] as? [[String: Any]])?.first?["liveStreamingDetails"] as? [String: Any])
+        return (d?["concurrentViewers"] as? String).flatMap(Int.init) ?? (d?["concurrentViewers"] as? Int)
+    }
+
     /// STOP: end the broadcast (auto stop is off, so YouTube would otherwise keep waiting for data).
     public func complete(_ id: String) async throws {
         _ = try await call("POST", "liveBroadcasts/transition?part=id,status&broadcastStatus=complete&id=\(id)")

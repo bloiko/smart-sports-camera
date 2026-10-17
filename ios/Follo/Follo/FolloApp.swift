@@ -3,13 +3,14 @@ import AVFoundation
 
 @main
 struct FolloApp: App {
-    @State var onboarded = UserDefaults.standard.bool(forKey: "onboarding.done") || CommandLine.arguments.contains("--autostart")
+    @State var onboarded = UserDefaults.standard.bool(forKey: "onboarding.done") || CommandLine.arguments.contains("--autostart") || CommandLine.arguments.contains("--skip-onboarding")
 
     init() {
         #if DEBUG
         if CommandLine.arguments.contains("--wipe-matches") { Self.wipeMatches() }
         #endif
         Self.watchSystemEvents()
+        MetricsReporter.shared.start()                    // iOS reports: why the app was terminated, crashes, hangs
     }
 
     /// Why iOS takes the app off the screen (found in a 90-min run: the app went to the background at 33 min with no

@@ -6,6 +6,8 @@ Usage: python src/netfault.py LISTEN_PORT TARGET_PORT "30:reset:10,90:blackhole:
   blackhole — stop passing bytes in both directions and ignore new connections for the given seconds, then close the
               stuck connections (mobile data that silently stops: no error reaches the client).
   tarpit    — accept new connections but never answer them (a server that takes the TCP connection and hangs).
+  throttleN — pass at most N kbit/s in each direction (slow upload: the stream must step its bitrate down),
+              e.g. "0:throttle2500:600".
 """
 import socket, sys, threading, time
 
@@ -26,10 +28,12 @@ def pump(a, b, pair):
         while True:
             while mode(time.time()) == 'blackhole' and not pair['dead']: time.sleep(0.05)
             if pair['dead']: break
-            x = a.recv(65536)
+            m = mode(time.time())
+            x = a.recv(8192 if m.startswith('throttle') else 65536)
             if not x: break
             if mode(time.time()) == 'blackhole': pair['held'].append((b, x)); continue
             b.sendall(x)
+            if m.startswith('throttle'): time.sleep(len(x) * 8 / (int(m[8:]) * 1000))
     except Exception: pass
     pair['dead'] = True
     for s in (a, b):
@@ -60,7 +64,7 @@ while True:
     if t0 is None: t0 = time.time(); log('first client')
     m = mode(time.time())
     if m == 'tarpit': log('tarpit: holding a new connection silently'); conns.append({'dead': False, 'held': [], 'socks': (c,)}); continue
-    if m != 'ok': log('refused new connection (', m, ')'); c.close(); continue
+    if m != 'ok' and not m.startswith('throttle'): log('refused new connection (', m, ')'); c.close(); continue
     try: u = socket.create_connection(('127.0.0.1', target_port), timeout=3)
     except Exception as e: log('server not ready', e); c.close(); continue
     u.settimeout(None); log('connection opened')

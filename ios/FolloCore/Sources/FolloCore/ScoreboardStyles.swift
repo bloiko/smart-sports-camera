@@ -223,3 +223,33 @@ extension CGContext {
     func round(_ r: CGRect, _ rad: Double, _ c: CGColor) { setFillColor(c); addPath(CGPath(roundedRect: r, cornerWidth: rad, cornerHeight: rad, transform: nil)); fillPath() }
     func circle(_ p: CGPoint, _ rad: Double, _ c: CGColor) { setFillColor(c); fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: 2 * rad, height: 2 * rad)) }
 }
+
+public extension Scoreboard {
+    /// Full 1920×1080 card the stream shows during half-time instead of the camera (owner, 2026-10-17): "ПЕРЕРВА",
+    /// both clubs with their kit colours, the score, and `line` ("Другий тайм о 11:55"). The phone cools down meanwhile.
+    static func breakCard(_ s: ScoreState, title: String = "ПЕРЕРВА", line: String?) -> CGImage? {
+        let d = Drawer(), W = 1920.0, H = 1080.0
+        func centred(_ c: CGContext, _ t: String, _ f: CTFont, _ col: CGColor, cx: Double, y: Double, h: Double) {
+            d.text(c, t, f, col, x: cx - d.width(t, f) / 2, y: y, h: h)
+        }
+        return d.image(W, H) { c in
+            c.fill(CGRect(x: 0, y: 0, width: W, height: H), CGColor(red: 0.05, green: 0.06, blue: 0.09, alpha: 1))
+            c.fill(CGRect(x: 0, y: 0, width: W, height: 10), Drawer.accent)                                   // red rules
+            c.fill(CGRect(x: 0, y: H - 10, width: W, height: 10), Drawer.accent)
+            // title in a red block
+            let tf = d.bold(64), tw = d.width(title, tf) + 80
+            c.round(CGRect(x: (W - tw) / 2, y: 800, width: tw, height: 110), 14, Drawer.accent)
+            centred(c, title, tf, Drawer.white, cx: W / 2, y: 800, h: 110)
+            // clubs and score
+            let nf = d.bold(60), sf = d.bold(200)
+            let home = short(s.home.name), away = short(s.away.name)
+            centred(c, "\(s.homeGoals) : \(s.awayGoals)", sf, Drawer.white, cx: W / 2, y: 430, h: 260)
+            for (name, team, cx) in [(home, s.home, W * 0.2), (away, s.away, W * 0.8)] {
+                centred(c, name, nf, Drawer.white, cx: cx, y: 520, h: 80)
+                c.round(CGRect(x: cx - 90, y: 480, width: 180, height: 16), 8, Drawer.col(team))               // kit colour
+            }
+            if let line { centred(c, line, d.reg(48), CGColor(red: 1, green: 1, blue: 1, alpha: 0.8), cx: W / 2, y: 230, h: 70) }
+            d.text(c, "Follo", d.bold(32), CGColor(red: 1, green: 1, blue: 1, alpha: 0.35), x: W - 150, y: 40, h: 40)
+        }
+    }
+}

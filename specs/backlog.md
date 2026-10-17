@@ -6,6 +6,18 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
 
 ## P0: now
 
+### Phone check of the 2026-10-17 overnight work (owner on the phone, ~20 min)
+- **Sign-in and broadcast title:** sign in from onboarding or the setup screen; the broadcast title is the teams.
+- **Landscape:** on the tripod, GO LIVE and STOP are reachable; the overlay shows the pitch and green corners.
+- **Half-time:** "Перерва" puts the card on YouTube; "Другий тайм" brings the camera back with the clock at 2Т 45:00;
+  check the YouTube timeline has no jump.
+- **Viewers:** the eye number matches YouTube Studio.
+
+### Pitch mask includes the treeline on match 2 (found by the position overlay, 2026-10-17)
+- The far quarter used for the "goals in frame" check sits on the trees, not on the far touchline.
+- The check passes, but for the wrong reason.
+- Fix with the camera work on the owner's stadium footage (stage 3 of `docs/youtube-signin-and-ui-test-plan.md`).
+
 ### 0. Camera on the phone jumps and follows the wrong thing (owner, 2026-10-15): done
 - Fixed 2026-10-15: spare balls and ball boys (isolated candidates must fly to count) and the full-resolution environment on the phone; results in `results.md`. Left: the static look-alike at (2974, 201) in match 2 (Core ML, 1:02.3 late goal mode), backlog 3c item 4.
 

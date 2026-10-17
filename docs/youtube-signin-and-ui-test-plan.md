@@ -116,7 +116,7 @@ drops, and switches visibility on request.
   (`beginBackgroundTask`). The camera stops, but the connection and the ring stay, so a swipe away and back costs no
   reconnect. Test from the Mac by opening Settings on the phone for 1, 5 and 30 s; compare reconnects and delay before
   and after.
-- **Faster restart:** when GO LIVE continues a saved match, take the 7 position frames 1 s apart instead of 10 s (the check itself stays).
+- ~~Faster restart~~: not needed. The phone log shows the position check takes 14 s (frames are 1.4 s apart); the 1.5 min gap was the time to reopen the app. It is slow only on the simulator (CPU).
 - **Warn when the app leaves the screen:** a sound and a vibration. Suggest Guided Access for matches.
 
 ## Stage 3. Camera quality on the owner's stadium
@@ -218,6 +218,25 @@ detector is compared with the current one on the same checklists before it repla
 - **Restart mid-match.** The app was killed from the switcher; GO LIVE reused `Ib7Nb7IcBOw` (live, unlisted), with the
   same link and the same match folder. YouTube accepted the stream in 0.5 s.
 - **STOP** ended the broadcast (`transition → 200`).
-- **Gap after a restart: about 1.5 min**, about 1 min of it the position check (7 frames, one every 10 s). **Stage 2
-  item:** when continuing a saved match, sample the position frames every second, so the check takes about 10 s. The
-  rule stays: no stream before the check passes.
+- **Gap after a restart: about 1.5 min.** Correction (2026-10-17): the position check itself took 14 s on the phone
+  (app start 01:10:44 → "pitch ok" 01:10:58). The rest was the owner reopening the app and pressing GO LIVE.
+
+## UI tests after the overnight work (2026-10-17)
+
+`ios/ui_test.sh` runs 7 tests, all green:
+1. GO LIVE and STOP.
+2. Delete a match.
+3. YouTube unlisted, same link after a restart.
+4. Recording does not wait for YouTube.
+5. Expired sign-in banner.
+6. Landscape.
+7. Half-time.
+
+Lessons from the tests themselves:
+- **Edge check.** `allInsideScreen` fails a test when a button sticks out of the screen. It found the score panel being
+  ~26 pt wider than an iPhone in portrait.
+- **Lazy list.** The list loads rows lazily: check that a deleted match is gone by its label, not by the row count.
+- **Dimmed screen.** After 60 s without a touch the live screen dims and the first touch only wakes it. Tests call
+  `wake()` before STOP.
+- **Landscape screenshots.** XCUITest stores them wrongly. Use element frames (`app.windows.firstMatch.frame`, button
+  frames) to check landscape, not the pictures.

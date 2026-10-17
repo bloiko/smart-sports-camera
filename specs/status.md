@@ -179,6 +179,19 @@ Last updated: 2026-10-12 (session 4: Follo app, Core ML camera)
 - UI tests on the simulator (`ios/ui_test.sh`, stage 0 of `docs/youtube-signin-and-ui-test-plan.md`).
 - Next: stage 1 of that plan, own Google sign-in with unlisted broadcasts and a stable link.
 
+**Done 2026-10-17 (overnight, Mac and simulator only):**
+- GO LIVE records first; the stream connects with retries.
+- Sign-in check on launch, and real sign-in in onboarding.
+- Broadcast titles from the teams.
+- Landscape layout.
+- Position overlay "Що бачить застосунок", with Ukrainian hints.
+- Viewer count.
+- Bitrate advisor from server acknowledgements.
+- Half-time card with camera, detection and recording off.
+- Build time and MetricKit reports.
+- UI tests 1–7 (`ios/ui_test.sh`).
+- **Phone check of all of it still to do.**
+
 **To do:** live run with YouTube on the phone; a long test-video run (thermal, battery over 90 min); compare the phone camera path with `live_sim.py` on the same file; then the streamer buffer of encoded frames, Google Sign-In, settings screen (10), edge-case items 15–21. Blocked on the owner: Xcode, first run, own footage, Google Cloud project.
 
 **Difficulties**

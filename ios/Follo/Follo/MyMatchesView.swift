@@ -5,15 +5,31 @@ struct MyMatchesView: View {
     @State var matches = MatchStore.load()
     @State var newMatch = false
     @State var toDelete: MatchRecord?
+    @ObservedObject var yt = YouTubeAccount.shared
     static var autostarted = false
     var body: some View {
         NavigationStack {
             List {
+                if yt.expired || (yt.daysLeft ?? 7) <= 1 {                   // вдома, а не на полі: вхід скінчився або скінчиться завтра
+                    Section {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label(yt.expired ? "Вхід у YouTube скінчився" : "Вхід у YouTube скінчиться завтра", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.yellow).font(.headline).accessibilityIdentifier("signInBanner")
+                            Text("Google тримає вхід 7 днів, поки застосунок на перевірці. Без входу буде лише запис, без ефіру.").font(.caption).foregroundStyle(.secondary)
+                            Button(yt.busy ? "Вхід…" : "Увійти знову") { Task { await yt.signIn() } }.disabled(yt.busy).accessibilityIdentifier("signInAgain")
+                        }
+                    }
+                }
                 Section {
                     Button { newMatch = true } label: {
                         HStack { Image(systemName: "record.circle.fill").foregroundStyle(.red); Text("Новий матч").font(.system(size: 20, weight: .heavy, design: .rounded)) }
                     }
                     Text(String(format: "Вільно %.0f GB (90 хв 4K ≈ 15 GB)", MatchStore.freeGB())).font(.caption).foregroundStyle(MatchStore.freeGB() < 15 ? .yellow : .secondary)
+                    HStack {
+                        Text("Збірка \(DebugLog.build)").font(.caption2).foregroundStyle(.tertiary).accessibilityIdentifier("build")
+                        Spacer()
+                        NavigationLink { MetricsView() } label: { Text("Звіти iOS (\(MetricsReporter.files.count))").font(.caption2) }.accessibilityIdentifier("metrics")
+                    }
                 }
                 Section(matches.isEmpty ? "Ще немає матчів" : "Матчі") {
                     ForEach(matches) { m in

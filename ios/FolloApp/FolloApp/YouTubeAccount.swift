@@ -11,7 +11,11 @@ import FolloCore
 /// without it sign-in is hidden and the debug paths (Studio key, own RTMP server) work as before.
 @MainActor
 final class YouTubeAccount: NSObject, ObservableObject, ASWebAuthenticationPresentationContextProviding {
+    /// One account for the whole app: "Мої матчі" checks the sign-in on launch, the setup screen uses it for GO LIVE.
+    static let shared = YouTubeAccount()
     @Published private(set) var signedIn = false
+    /// The sign-in ran out (Google keeps it 7 days while the project is in Testing) or was revoked: "Увійди знову".
+    @Published private(set) var expired = false
     @Published private(set) var channel: String?
     @Published var error: String?
     @Published private(set) var busy = false
@@ -57,7 +61,20 @@ final class YouTubeAccount: NSObject, ObservableObject, ASWebAuthenticationPrese
         #endif
         // didSet does not run for assignments inside the class's own init: set the flag by hand
         signedIn = tokens?.refreshToken != nil
-        if signedIn { Task { await loadChannel() } }
+        if signedIn { Task { await check() } }
+    }
+
+    /// On launch: refresh the token now, at home, not at GO LIVE on the pitch. Expired → `expired` (banner).
+    func check() async {
+        do { _ = try await accessToken(); await loadChannel(); DebugLog.log("YouTube: sign-in ok\(daysLeft.map { ", \($0) days left" } ?? "")") }
+        catch GoogleAuth.AuthError.signedOut { }
+        catch { DebugLog.log("YouTube: sign-in check: \(error.localizedDescription) (offline?)") }
+    }
+
+    /// Days until Google drops the sign-in (7 days from signing in, while the Google project is in Testing).
+    var daysLeft: Int? {
+        guard signedIn, let at = UserDefaults.standard.object(forKey: "yt.signedInAt") as? Date else { return nil }
+        return max(0, 7 - Int(Date().timeIntervalSince(at) / 86400))
     }
 
     func signIn() async {
@@ -75,6 +92,7 @@ final class YouTubeAccount: NSObject, ObservableObject, ASWebAuthenticationPrese
             }
             let code = try auth.code(from: callback, attempt: attempt)
             tokens = try await auth.exchange(code: code, verifier: attempt.verifier)
+            UserDefaults.standard.set(Date(), forKey: "yt.signedInAt"); expired = false
             DebugLog.log("YouTube: signed in")
             await loadChannel()
         } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
@@ -85,14 +103,18 @@ final class YouTubeAccount: NSObject, ObservableObject, ASWebAuthenticationPrese
         session = nil
     }
 
-    func signOut() { tokens = nil; channel = nil; streamId = nil; DebugLog.log("YouTube: signed out") }
+    func signOut() { tokens = nil; channel = nil; streamId = nil; expired = false; DebugLog.log("YouTube: signed out") }
 
     /// A valid access token, refreshed when it has expired. A revoked or expired sign-in signs out.
     func accessToken() async throws -> String {
         guard let auth, let t = tokens, let rt = t.refreshToken else { throw GoogleAuth.AuthError.signedOut }
         if t.expiresAt > Date(), !t.accessToken.isEmpty { return t.accessToken }
         do { let n = try await auth.refresh(rt); tokens = n; return n.accessToken }
-        catch GoogleAuth.AuthError.signedOut { signOut(); throw GoogleAuth.AuthError.signedOut }
+        catch GoogleAuth.AuthError.signedOut {
+            // keep the stream id (same channel after signing in again); only the tokens are gone
+            tokens = nil; channel = nil; expired = true; DebugLog.log("YouTube: sign-in expired")
+            throw GoogleAuth.AuthError.signedOut
+        }
     }
 
     func api() -> YouTubeAPI {

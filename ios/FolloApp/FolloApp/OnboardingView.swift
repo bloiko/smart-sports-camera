@@ -1,10 +1,11 @@
 import SwiftUI
 import AVFoundation
 
-/// Екрани 1–3: вхід Google (поки що заглушка до підключення SDK), 3 картки онбордингу, дозволи.
+/// Екрани 1–3: вхід Google (власний, YouTubeAccount), 3 картки онбордингу, дозволи.
 struct OnboardingView: View {
     var onDone: () -> Void
     @State var page = 0
+    @ObservedObject var yt = YouTubeAccount.shared
     let cards: [(String, String, String)] = [
         ("iphone.landscape", "Телефон горизонтально, ширококутна камера", "Став на штатив, перила чи паркан на висоті 2–3 м біля центральної лінії за бровкою. Обидва ворота мають бути в кадрі — застосунок сам перевірить."),
         ("record.circle", "Одна кнопка", "Натисни Go live — Follo сам знайде поле, ворота і м'яч, стежитиме за грою і стрімитиме 1080p на YouTube. Широкий 4K-запис лишається на телефоні."),
@@ -16,8 +17,12 @@ struct OnboardingView: View {
                 Spacer()
                 Text("Follo").font(.system(size: 44, weight: .heavy, design: .rounded)); Text("Follo the match.").foregroundStyle(.secondary)
                 Spacer()
-                Text("Вхід через Google потрібен лише для YouTube Live (Google Sign-In SDK: див. docs/youtube-live.md)").font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                Button("Увійти через Google") { page = 0 }.buttonStyle(.borderedProminent)
+                Text("Вхід через Google потрібен лише для ефіру на YouTube. Ефіри стартують «Не для всіх»: бачать лише ті, кому ти дав посилання.").font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24)
+                if let e = yt.error { Text(e).font(.caption2).foregroundStyle(.yellow) }
+                if yt.auth != nil {
+                    Button(yt.busy ? "Вхід…" : "Увійти через Google") { Task { await yt.signIn(); if yt.signedIn { page = 0 } } }
+                        .buttonStyle(.borderedProminent).disabled(yt.busy)
+                }
                 Button("Поки без YouTube (лише запис)") { page = 0 }.font(.footnote)
             } else {
                 TabView(selection: $page) {

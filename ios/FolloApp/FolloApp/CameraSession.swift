@@ -36,6 +36,44 @@ final class CameraSession: NSObject, ObservableObject {
         }
     }
 
+    /// Debug (2026-10-18): which formats the ultra-wide and the 1× camera offer for two cameras at once
+    /// (AVCaptureMultiCamSession). Decides whether "two cameras without a motor" can beat 0.5× 4K on detail.
+    static func multicamProbe() {
+        DebugLog.log("multicam supported: \(AVCaptureMultiCamSession.isMultiCamSupported)")
+        for t in [AVCaptureDevice.DeviceType.builtInUltraWideCamera, .builtInWideAngleCamera] {
+            guard let d = AVCaptureDevice.default(t, for: .video, position: .back) else { continue }
+            let fs = d.formats.filter { $0.isMultiCamSupported }.map { f -> String in
+                let dim = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+                let fps = f.videoSupportedFrameRateRanges.map { Int($0.maxFrameRate) }.max() ?? 0
+                return "\(dim.width)x\(dim.height)@\(fps) \(String(format: "%.1f", f.videoFieldOfView))°"
+            }
+            DebugLog.log("multicam formats \(d.localizedName): " + Array(Set(fs)).sorted().joined(separator: ", "))
+        }
+        // hardware cost of concrete pairs (≤ 1.0 runs): ultra-wide size × 1× size
+        guard let uw = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back),
+              let w = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else { return }
+        func fmt(_ d: AVCaptureDevice, _ width: Int32, _ height: Int32) -> AVCaptureDevice.Format? {
+            d.formats.first { f in let x = CMVideoFormatDescriptionGetDimensions(f.formatDescription); return f.isMultiCamSupported && x.width == width && x.height == height }
+        }
+        for (a, b) in [((3840, 2160), (3840, 2160)), ((1920, 1080), (3840, 2160)), ((3840, 2160), (1920, 1080)), ((1920, 1440), (3840, 2160)), ((1920, 1080), (1920, 1080))] {
+            let ses = AVCaptureMultiCamSession(); ses.beginConfiguration()
+            guard let fa = fmt(uw, Int32(a.0), Int32(a.1)), let fb = fmt(w, Int32(b.0), Int32(b.1)),
+                  let ia = try? AVCaptureDeviceInput(device: uw), let ib = try? AVCaptureDeviceInput(device: w) else { continue }
+            try? uw.lockForConfiguration(); uw.activeFormat = fa; uw.unlockForConfiguration()
+            try? w.lockForConfiguration(); w.activeFormat = fb; w.unlockForConfiguration()
+            if ses.canAddInput(ia) { ses.addInputWithNoConnections(ia) }
+            if ses.canAddInput(ib) { ses.addInputWithNoConnections(ib) }
+            for (inp, dev) in [(ia, uw), (ib, w)] {
+                let out = AVCaptureVideoDataOutput()
+                guard ses.canAddOutput(out), let port = inp.ports(for: .video, sourceDeviceType: dev.deviceType, sourceDevicePosition: .back).first else { continue }
+                ses.addOutputWithNoConnections(out)
+                let c = AVCaptureConnection(inputPorts: [port], output: out); if ses.canAddConnection(c) { ses.addConnection(c) }
+            }
+            ses.commitConfiguration()
+            DebugLog.log(String(format: "multicam pair ultra-wide %dx%d + 1× %dx%d: hardware cost %.2f, system pressure cost %.2f", a.0, a.1, b.0, b.1, ses.hardwareCost, ses.systemPressureCost))
+        }
+    }
+
     /// Перемкнути ультраширокy ↔ широку камеру (перезбирає сесію).
     func switchCamera(wide: Bool) {
         useWide = wide
@@ -80,6 +118,7 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var cameraError: String?
 
     func configure() {
+        if CommandLine.arguments.contains("--multicam-probe") { Self.multicamProbe() }
         if let v = testVideo { startFile(v); return }
         AVCaptureDevice.requestAccess(for: .video) { ok in
             DebugLog.log("camera permission \(ok)")

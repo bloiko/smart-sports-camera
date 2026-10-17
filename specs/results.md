@@ -637,3 +637,19 @@ Caveats:
 - The labels come from the offline pipeline, which itself uses this YOLO model, so the comparison favours YOLO on track
   frames.
 - Our network after 1 epoch (m1+m2 last 20%): recall 0.54, false alarms 0.035.
+
+**First result (2026-10-17): full model, 25 epochs on m1+m2** (`work/ballnet/full/eval.json`). The fair parts are the
+last 20% of m1/m2 and the whole of m3 (never seen). YOLO at 0.4, ours at 0.3:
+
+| Part | Recall: YOLO → ours | Interpolated frames | Spare balls taken for the ball | Player feet false alarms | Ball found but > 4 px off |
+| --- | --- | --- | --- | --- | --- |
+| m1 last 20% | 0.79 → **0.84** | 0.76 → 0.81 | 0.90 → **0.00** | 0.08 → 0.08 | 0.07 → 0.07 |
+| m2 last 20% | 0.71 → 0.72 | 0.69 → 0.69 | — | 0.10 → 0.03 | 0.12 → 0.13 |
+| m3, unseen stadium | 0.23 → **0.46** | 0.21 → 0.44 | 0.43 → **0.03** | 0.06 → 0.07 | 0.10 → **0.20** (worse) |
+
+Open questions:
+- Our network sees the tracker prior and YOLO does not (in the live pipeline YOLO gets it only as the ROI centre); the
+  noprior ablation will say how much of the gain is the prior.
+- On m3 the network more often marks a wrong spot, maybe by trusting a wrong prior.
+- The training queue was killed when the Claude app quit. It now runs in `screen -S ballnet`
+  (`work/ballnet/run_all.sh`, resumable).

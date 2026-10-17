@@ -653,3 +653,21 @@ Open questions:
 - On m3 the network more often marks a wrong spot, maybe by trusting a wrong prior.
 - The training queue was killed when the Claude app quit. It now runs in `screen -S ballnet`
   (`work/ballnet/run_all.sh`, resumable).
+
+**Phone budget (2026-10-17, `src/ballnet_coreml.py`).** Core ML FP16, iOS 17 target, timed on the Mac's M1 Neural Engine
+next to today's ball model:
+
+| | FolloNet-B full (ROI 320×320, 13 channels) | Today's YOLO ball model (640×640) |
+| --- | --- | --- |
+| Params | 0.50 M | 2.6 M |
+| Compute | 3.37 GMAC (6.7 GFLOPs) | ≈ 6.5 GFLOPs |
+| Time per ROI, CPU + Neural Engine | **2.25 ms** | 5.88 ms |
+| Time per ROI, CPU only | 14.5 ms | — |
+
+- **Compute plan.** Every operation runs on the Neural Engine (14 conv, 12 relu, 2 nearest upsample, 2 concat,
+  1 sigmoid). Peak picking stays in Swift.
+- **Phone budget.** The live pipeline runs ≤ 2 ROIs every 2nd frame, so ≈ 4.5 ms per 66 ms on the M1. The A16 Neural
+  Engine is faster than the M1's, so the iPhone 15 carries it with room to spare, and with less heat than today's
+  model.
+- **Still to solve on the phone.** The input needs crops of frames t-1 and t-2: keep the last two ROI-sized crops (or
+  two frames) and build the 13-channel input with Accelerate. That is a few ms of CPU, to be measured in Swift.

@@ -16,6 +16,7 @@ import cv2, glob, json, math, numpy as np, os, random, sys, time
 import torch, torch.nn as nn, torch.nn.functional as F
 
 DS, OUT_ROOT = 'work/ballds', 'work/ballnet'
+if '--ds' in sys.argv: DS = sys.argv[sys.argv.index('--ds') + 1]           # e.g. work/ballds_v3 (fast-pass positives)
 STRIDE, SIGMA_OUT, PRIOR_SIGMA = 2, 1.5, 10.0
 
 def opt(k, d):
@@ -35,6 +36,48 @@ class Samples(torch.utils.data.Dataset):
         self.files = sorted(f for m in matches for f in glob.glob(f'{DS}/{m}/*.npz'))
         self.files = [f for f in self.files if (split is None) or self._split(f) == split]
         self.inputs, self.train = inputs, train
+        self.synth = train and '--synth' in sys.argv
+        self.sprites = self._sprites() if self.synth else []
+
+    def _sprites(self, n=600):
+        """Real balls cut from track (not interpolated) training crops: 14×14 patches for synthetic fast passes."""
+        out = []
+        for f in random.Random(0).sample(self.files, len(self.files)):
+            z = np.load(f)
+            if z['ball'][0] < 0 or int(z['interp']): continue
+            img = cv2.imdecode(z['f2'], cv2.IMREAD_COLOR); bx, by = int(z['ball'][0]), int(z['ball'][1])
+            if not (6 <= bx < img.shape[1] - 6 and 6 <= by < img.shape[0] - 6): continue
+            spr = img[by - 6:by + 6, bx - 6:bx + 6].astype(np.float32)
+            lum = spr.mean(2); border = np.concatenate([lum[0], lum[-1], lum[:, 0], lum[:, -1]])
+            alpha = np.clip((lum - np.median(border) - 10) / 40, 0, 1)        # only the ball: brighter than the grass
+            if alpha.sum() >= 5: out.append(np.dstack([spr, alpha]))
+            if len(out) >= n: break
+        print(f'synthetic fast passes: {len(out)} ball sprites', flush=True)
+        return out
+
+    def _paste(self, frames, rng):
+        """A real ball flying across the 3 frames at up to 15 px per frame, blurred along its motion (2026-10-18: the
+        network lost a fast far pass at m2 0:10; the labels had almost no fast passes). Returns the ball in frame t."""
+        S = frames[0].shape[0]; sa = self.sprites[rng.randrange(len(self.sprites))]
+        k = rng.uniform(0.8, 1.3); size = max(6, int(12 * k)); sa = cv2.resize(sa, (size, size), interpolation=cv2.INTER_LINEAR)
+        spr, mask = sa[:, :, :3], sa[:, :, 3]
+        sp = rng.uniform(3, 15); ang = rng.uniform(0, 2 * math.pi); v = np.array([math.cos(ang), math.sin(ang)]) * sp
+        grass = lambda p: (lambda c: c[1] > c[2] + 8 and c[1] > c[0] + 8)(frames[2][int(p[1]), int(p[0])].astype(int))   # BGR
+        for _ in range(12):                                                      # the pass runs on the grass
+            end = np.array([rng.uniform(24, S - 24), rng.uniform(24, S - 24)]); starts = [end - v * (2 - i) for i in range(3)]
+            if all(0 <= q[0] < S and 0 <= q[1] < S and grass(q) for q in starts): break
+        else:
+            return None
+        L = max(1, int(round(sp)))
+        kern = np.zeros((L * 2 + 1, L * 2 + 1), np.float32); cv2.line(kern, (L - int(v[0] / 2), L - int(v[1] / 2)), (L + int(v[0] / 2), L + int(v[1] / 2)), 1, 1); kern /= kern.sum()
+        for fr, p in zip(frames, starts):
+            x0, y0 = int(p[0] - size / 2), int(p[1] - size / 2)
+            if x0 < 0 or y0 < 0 or x0 + size > S or y0 + size > S: return None
+            layer = np.zeros_like(fr, dtype=np.float32); alpha = np.zeros(fr.shape[:2], np.float32)
+            layer[y0:y0 + size, x0:x0 + size] = spr; alpha[y0:y0 + size, x0:x0 + size] = mask
+            layer = cv2.filter2D(layer, -1, kern); alpha = cv2.filter2D(alpha, -1, kern)[:, :, None]
+            fr[:] = np.clip(fr.astype(np.float32) * (1 - alpha) + layer * alpha, 0, 255).astype(np.uint8)
+        return end
 
     @staticmethod
     def _split(f):
@@ -48,9 +91,12 @@ class Samples(torch.utils.data.Dataset):
         rng = random.Random() if self.train else random.Random(i)              # val: the same prior every epoch
         dec = lambda k: cv2.imdecode(z[k], cv2.IMREAD_COLOR)
         frames = [dec('f0'), dec('f1'), dec('f2')] if 'f3' in self.inputs else [dec('f2')]
+        ball = z['ball'].astype(np.float32); has = ball[0] >= 0; decoy = z['decoy'].astype(np.float32)
+        if self.synth and not has and len(frames) == 3 and rng.random() < 0.4:   # ball-less crop → a synthetic fast pass
+            e = self._paste(frames, rng)
+            if e is not None: ball = e.astype(np.float32); has = True
         imgs = frames + ([dec('bg')] if 'bg' in self.inputs else [])
         S = imgs[0].shape[0]
-        ball = z['ball'].astype(np.float32); has = ball[0] >= 0; decoy = z['decoy'].astype(np.float32)
         x = np.concatenate([im.astype(np.float32) / 255 for im in imgs], axis=2)            # H W C (BGR)
         if self.train:
             if rng.random() < 0.5:                                                          # horizontal flip

@@ -139,7 +139,8 @@ def detect(video, out_path):
             for c in rois:
                 x0 = int(np.clip(c[0] - ROI / 2, 0, W - ROI)); y0 = int(np.clip(c[1] - ROI / 2, 0, H - ROI)); rec['roi'].append([x0, y0])
                 if bnet:                                          # own network: native ROI, 3 frames, prior at the target
-                    for bx, by, sc in bnet.detect(ring, x0, y0, ROI, c):
+                    # BALL_NET_PRIOR=always: the prior also on search spots (first version: lost the ball at m2 0:10)
+                    for bx, by, sc in bnet.detect(ring, x0, y0, ROI, c, use_prior=not lost or os.environ.get('BALL_NET_PRIOR') == 'always'):
                         bs.append([round(bx - 4, 1), round(by - 4, 1), round(bx + 4, 1), round(by + 4, 1), round(sc, 3), bg_diff(img, bx, by)])
                     continue
                 patch = cv2.resize(img[y0:y0 + ROI, x0:x0 + ROI], None, fx=ROI_UP, fy=ROI_UP, interpolation=cv2.INTER_CUBIC)

@@ -47,6 +47,21 @@ for a, b in zip(ks, ks[1:]):
         for f in range(a + 1, b):
             truth[f] = list(pa + (pb - pa) * (f - a) / (b - a)); interp.add(f)
 
+# --fast (v3, 2026-10-18): fast passes were missing (track points 30 frames apart, interpolation only ≤ 10), and the
+# network lost a fast far pass at m2 0:10. Inside gaps of up to 60 frames, take the live YOLO tracker's accepted ball
+# where it lies within 20 px of the line between the two track points: two independent sources agree.
+if '--fast' in sys.argv:
+    live_ball = {r['frame']: r['ball'] for r in live if 'ball' in r}
+    added = 0
+    for a, b in zip(ks, ks[1:]):
+        if b - a <= 10 or b - a > 60: continue
+        pa, pb = np.array(track[a]), np.array(track[b])
+        for f in range(a + 1, b):
+            if f in live_ball:
+                q = np.array(live_ball[f]); lin = pa + (pb - pa) * (f - a) / (b - a)
+                if np.linalg.norm(q - lin) < 20: truth[f] = list(q); interp.add(f); added += 1
+    print('fast-pass positives from live YOLO agreeing with the track line:', added, flush=True)
+
 def cands(rec):
     return [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, b[4] if len(b) > 4 else 1.0) for b in rec.get('balls') or []]
 

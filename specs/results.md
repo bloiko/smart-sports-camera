@@ -714,3 +714,27 @@ next to today's ball model:
   - m1: ball in crop 0.941, checklist 1/1;
   - m2: ball in crop 0.923, checklist 4/4.
   - Own-network runs are in progress.
+
+**m1/m2 with FolloNet-B nobg, and a regression (2026-10-18).**
+
+| Match | Ball in crop: YOLO → ours | Checklist |
+| --- | --- | --- |
+| m1 | 0.941 → 0.953 | 1/1 |
+| m2 | 0.923 → 0.960 | **3/4** |
+| m3 (unseen) | 0.722 → 0.847 | 2/2 |
+
+**The failure: m2 0:13.5 right attack**, goal mouth in frame 73%.
+- The network lost a fast far pass (frames 218–326, ball at about 2800–3260 px, y 210–380): no peak even inside the
+  right ROI. It found the ball again only once it stopped (0.96).
+- Version 2 (prior only while tracking) did not change it: still 3/4, m3 0.833.
+- **Cause: missing training data.** The offline track has points 30 frames apart there, and interpolation took only
+  gaps ≤ 10 frames, so fast far passes were nearly absent from training.
+- **Not ready to replace YOLO yet** (project rule: every checklist event passes).
+
+**v3, running overnight** (`work/ballnet/night_v3.sh`):
+- **Dataset `work/ballds_v3`.** Adds fast-pass positives where the live YOLO tracker agrees with the track line in
+  gaps ≤ 60 frames (+191 samples).
+- **Synthetic fast passes (`--synth`).** On 40% of ball-less crops, a real ball sprite (only pixels brighter than the
+  grass) flies over the grass at 3–15 px per frame, with motion blur. Checked on a contact sheet
+  (`work/ballnet/synth_sheet.jpg`).
+- **Then:** crop evaluation, then the live simulator on m3, m2, m1 with the checklists.

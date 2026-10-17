@@ -19,12 +19,13 @@ class BallNetLive:
         self.dev, self.name = dev, name
 
     @torch.no_grad()
-    def detect(self, ring, x0, y0, S, target):
+    def detect(self, ring, x0, y0, S, target, use_prior=True):
         frames = list(ring)[-3:] if 'f3' in self.inputs else list(ring)[-1:]
         while len(frames) < (3 if 'f3' in self.inputs else 1): frames.insert(0, frames[0])
         x = np.concatenate([fr[y0:y0 + S, x0:x0 + S].astype(np.float32) / 255 for fr in frames], axis=2)
-        if 'prior' in self.inputs:
-            x = np.concatenate([x, gauss(S, S, target[0] - x0, target[1] - y0, PRIOR_SIGMA)[:, :, None]], axis=2)
+        if 'prior' in self.inputs:                      # no prior while searching: a search spot is not the ball
+            pr = gauss(S, S, target[0] - x0, target[1] - y0, PRIOR_SIGMA) if use_prior else np.zeros((S, S), np.float32)
+            x = np.concatenate([x, pr[:, :, None]], axis=2)
         t = torch.from_numpy(x.transpose(2, 0, 1).copy())[None].to(self.dev)
         h, o = self.model(t)
         p = torch.sigmoid(h)[0, 0]

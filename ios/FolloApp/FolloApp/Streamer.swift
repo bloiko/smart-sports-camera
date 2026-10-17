@@ -16,6 +16,8 @@ final class Streamer: ObservableObject {
     @Published var droppedSeconds = 0.0
     /// Seconds the stream runs behind live after a network drop (own engine only).
     @Published var delayS = 0.0
+    /// Own engine: reconnects so far (the debug line on the live screen; UI tests read it).
+    @Published var reconnects = 0
     /// Mute button: silence instead of the microphone in the stream (the 4K recording has no audio anyway).
     @Published private(set) var muted = false
 
@@ -162,6 +164,7 @@ final class Streamer: ObservableObject {
             while let self, !Task.isCancelled, self.state != .ended {
                 self.state = f.isPublishing ? .live : (f.reconnects > 0 ? .reconnecting(attempt: f.reconnects) : .connecting)
                 self.delayS = f.delayS
+                self.reconnects = f.reconnects
                 tick += 1
                 if tick % 2 == 0, f.isPublishing, let k = self.advisor.update(t: ProcessInfo.processInfo.systemUptime, ackedBytes: f.ackedBytes, delayS: f.delayS) {
                     let m = Int(self.advisor.measuredKbps ?? 0)

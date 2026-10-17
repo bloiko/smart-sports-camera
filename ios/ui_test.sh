@@ -18,11 +18,13 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 # fake Google + YouTube for test3 (Apple's python: the firewall blocks Homebrew's)
 /usr/bin/python3 "$ROOT/src/fake_youtube.py" --port 8765 > "$OUT/fake_youtube.txt" 2>&1 &
 FAKE=$!
+# a real RTMP receiver for the fake YouTube ingest (rtmp://127.0.0.1:1935/live2, key fake-key), restarted after each connection
+( while [ ! -f "$OUT/stop_rtmp" ]; do ffmpeg -v error -listen 1 -i rtmp://127.0.0.1:1935/live2/fake-key -c copy -f flv -y "$OUT/recv.flv" >> "$OUT/rtmp_recv.txt" 2>&1; done ) &
 xcodebuild -project FolloApp.xcodeproj -scheme FolloAppUITests -destination "$DEST" -derivedDataPath "$DD" \
   -parallel-testing-enabled NO -resultBundlePath "$OUT/result.xcresult" test-without-building "$@" > "$OUT/xcodebuild.txt" 2>&1
 grep -E "Test Case .*(passed|failed)|error:|XCTAssert" "$OUT/xcodebuild.txt"
 xcrun xcresulttool export attachments --path "$OUT/result.xcresult" --output-path "$OUT/shots" >/dev/null 2>&1
 C=$(xcrun simctl get_app_container "$SIM" com.bohdanloiko.follo data); cp "$C/Documents/debug/log.txt" "$OUT/app_log.txt" 2>/dev/null
-kill $FAKE 2>/dev/null
+kill $FAKE 2>/dev/null; touch "$OUT/stop_rtmp"; pkill -f "listen 1 -i rtmp://127.0.0.1:1935/live2" 2>/dev/null
 xcrun simctl shutdown "$SIM"
 if grep -q "TEST EXECUTE SUCCEEDED\|TEST SUCCEEDED" "$OUT/xcodebuild.txt"; then echo "UI TESTS PASSED (screenshots: work/ui/shots)"; else echo "UI TESTS FAILED (see work/ui/xcodebuild.txt, work/ui/shots)"; exit 1; fi

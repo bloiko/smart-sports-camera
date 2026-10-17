@@ -13,6 +13,16 @@ Last updated: 2026-10-12 (session 4: Core ML camera done)
   check the YouTube timeline has no jump.
 - **Viewers:** the eye number matches YouTube Studio.
 
+### Phone: short trip to the background, before/after (owner, ~10 min)
+- During a test broadcast, swipe out of Follo for 1–5 s and come back, three times.
+- Do it once with `--no-bg-task` (old behaviour) and once without.
+- Compare "reconnects" on the live screen and the log; expected: reconnects only in the old behaviour.
+
+### Own detectors: owner's decision on the research
+- The report `reports/Власні нейромережі замість YOLO.md` proposes changes to `docs/detector-licence-plan.md`: two
+  switches (players and ball), Swift heatmap decoder, ball-hint head, 10–14 weeks, a FolloNet-B probe first.
+- Start after the owner agrees.
+
 ### Pitch mask includes the treeline on match 2 (found by the position overlay, 2026-10-17)
 - The far quarter used for the "goals in frame" check sits on the trees, not on the far touchline.
 - The check passes, but for the wrong reason.

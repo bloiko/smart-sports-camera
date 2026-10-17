@@ -588,3 +588,21 @@ Machine-readable lists live in `specs/checklists/matchN.json` (goal mouths measu
 Found on the way: the server acknowledges in large windows (ffmpeg: several MB), so a 10 s window sometimes held
 no acknowledgement and "measured" 1 Mbit/s on a 2.5 Mbit/s link. The rate is now taken between acknowledgement
 arrivals over up to 30 s. "Steady" is a delay under 1.5 s, because automatic catch-up stops at 1 s.
+
+## Catching up small delays and short trips to the background (2026-10-17)
+
+**Catch-up threshold 5 s → 1.5 s** (`FolloStreamer.Config.autoCatchUpAboveS`). Mac, match 2 from 20 s, one reset of
+1 s at 30 s (`30:reset:1`), as on the phone after a one-second trip to the background:
+
+| Run | Delay after the reconnect | Later | Frames |
+| --- | --- | --- | --- |
+| Before (5 s) | 3.9 s | 3.9 s until the end (115 s) | all delivered |
+| After (1.5 s) | 3.9 s | catch-up at 1.25× from 52 s, 1.9 s at 60 s, 1.0 s from 70 s | all delivered |
+| Regression: 2.5 Mbit/s link with the bitrate advisor | 2.2 s at the step down | 1.0 s from 60 s, step up to 1800 at 155 s | all delivered |
+
+**Background task during the match.** The app asks iOS for background time when it leaves the screen during a match,
+so the socket to YouTube stays open; `--no-bg-task` switches it off for before/after.
+- The simulator does not reproduce the problem: without the task, 5 s in the background cost no reconnect either.
+- The UI test (`test8b`) found a crash in the first version: `Int(backgroundTimeRemaining)` of iOS's "infinite" value.
+  It is fixed.
+- Before/after needs the phone: a 1–5 s swipe out during a match, with and without `--no-bg-task`.

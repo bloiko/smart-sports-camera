@@ -3,6 +3,27 @@
 Status: plan, 2026-10-16. Owner's rule (2026-10-16): **the finished app contains only our own code and our own model
 weights; nothing under another software licence.** This replaces the earlier idea of switching to Apache-2.0 detectors.
 
+## Research update (2026-10-17): proposed changes, waiting for the owner's decision
+
+Deep research report: `reports/Власні нейромережі замість YOLO.md`; notes in `research_notes/Власні нейромережі замість YOLO/`.
+The plan below is confirmed in principle. The report proposes these changes:
+
+| Plan item | Proposed change | Why |
+| --- | --- | --- |
+| Peaks → boxes inside a Core ML pipeline step | Peak mask (3×3 max-pool) in the model; threshold, top-k and offsets in a Swift `HeatmapDecoder` with a Python twin for parity | top-k and gather fall back to the CPU on the Neural Engine |
+| Own homography for SoccerTrack labels | Use SoccerTrack v2's own calibration (`raw/`) and human boxes (`mot/`) | Ready-made human labels; players need no YOLO teacher at all |
+| FolloNet-P outputs foot point + height | Also box width, offset and a **ball-hint head** | `LivePipeline.swift` uses COCO class 32 from the player pass as ball hints; `Jersey.swift` needs the box width for team colours |
+| FolloNet-B first | A FolloNet-B probe first as a go/no-go signal (data exists); FolloNet-P is likely the first to become default | Ball is the riskiest; players have human labels |
+| Budget ≤ 60 ms / ≤ 15 ms | ≤ 20 ms for both player tiles and ≤ 3 ms per ball ROI batch, with every op on the ANE (Xcode performance report) | YOLO11s already takes 43–55 ms for two tiles on the M1; CenterNet-ResNet34 is 6.85 ms on A16 (Apple) |
+| One switch "detector set" | Two independent switches, `players` and `ball` (yolo / own), with automatic rollback to YOLO on errors or a missed budget; before/after on replayed recordings, not both models live | Owner's rule: every new flow switchable and compared |
+| ~5–6 weeks | 10–14 weeks at ~1 h/day; first go/no-go after 2–3 weeks | Measured compute (one night on the M1 or 40–80 min on a Kaggle T4 per run) is not the limit; review time is |
+| Teacher labels | Hard box labels only (no distillation on YOLO logits or features); a provenance log; a final "clean" round without YOLO labels; a lawyer's opinion before a commercial launch | AGPL §2, the FSF and an Ultralytics staff reply support outputs not being covered, but there is no case law |
+
+Data: SoccerTrack v2 (CC BY 4.0, commercial use allowed, credit in "About") is the only football dataset confirmed for
+commercial use. SoccerNet (NDA, research only) and SportsMOT (CC BY-NC) are excluded. ImageNet and COCO weights are
+excluded: training from scratch, as in WASB, TrackNet and ScratchDet. Own footage needs club and parental consent for
+youth matches, and stays on the Mac.
+
 ## Boundary
 
 | | Allowed | Why |

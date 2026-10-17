@@ -108,7 +108,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"items": [s] if s else []})
         if path == "liveStreams" and method == "POST":
             sid = "S%d" % (len(streams) + 1)
-            streams[sid] = {"id": sid, "cdn": {"ingestionInfo": {"rtmpsIngestionAddress": STATE["ingest"], "ingestionAddress": STATE["ingest"], "streamName": "fake-key-" + sid}},
+            streams[sid] = {"id": sid, "cdn": {"ingestionInfo": {"rtmpsIngestionAddress": STATE["ingest"], "ingestionAddress": STATE["ingest"], "streamName": "fake-key"}},
                             "contentDetails": body.get("contentDetails", {})}
             return self.send(200, streams[sid])
         if path == "liveBroadcasts" and method == "GET":

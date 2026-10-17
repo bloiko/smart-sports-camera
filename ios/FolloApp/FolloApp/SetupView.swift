@@ -80,6 +80,7 @@ struct SetupView: View {
     @State var confirmPublic = false
     @State var viewers: Int?
     @State var breakFeed = BreakFeed()
+    @State var bgTask: UIBackgroundTaskIdentifier = .invalid
     @State var onBreak = false
     @State var breakMinutes = 15
     @State var secondHalfAt: Date?                                         // скільки людей дивляться зараз (YouTube, раз на 30 с)
@@ -141,7 +142,20 @@ struct SetupView: View {
         .onChange(of: scenePhase) { _, ph in
             // у фоні iOS і так зупиняє камеру; відпускаємо її явно, щоб вона не лишалась зайнятою
             DebugLog.log("scene \(ph == .active ? "active" : ph == .background ? "background" : "inactive")")
-            if ph == .background { cam.pause() } else if ph == .active { cam.resume() }
+            if ph == .background { cam.pause() } else if ph == .active, !onBreak { cam.resume() }      // на перерві камера лишається вимкненою
+            // Короткий вихід з застосунку (свайп, сповіщення): попросити в iOS час, щоб з'єднання з YouTube не обірвалось.
+            // Без цього iOS призупиняла застосунок за секунду й закривала сокет → перепідключення і 3 с відставання.
+            // Вимикач для порівняння до/після: --no-bg-task (debug).
+            if ph == .background, startedAt != nil, bgTask == .invalid, !CommandLine.arguments.contains("--no-bg-task") {
+                bgTask = UIApplication.shared.beginBackgroundTask(withName: "follo.stream") {
+                    DebugLog.log("background time is over: iOS will suspend the app"); UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid
+                }
+                // backgroundTimeRemaining is "infinite" until iOS decides: Int(...) of it crashed the app (UI test, 2026-10-17)
+                let left = UIApplication.shared.backgroundTimeRemaining
+                DebugLog.log("background: keeping the stream connection (\(left < 10_000 ? "\(Int(left)) s" : "time not set yet") allowed)")
+            } else if ph == .active, bgTask != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid; DebugLog.log("foreground again: background time released")
+            }
         }
         .onDisappear { cam.pause() }
         .onChange(of: cam.sourceFps, initial: true) { _, f in ls.runner.fps = f }
@@ -225,6 +239,9 @@ struct SetupView: View {
                 Text("Стрім: HaishinKit").tag("haishinkit"); Text("Стрім: Follo").tag("follo")
             }.pickerStyle(.segmented)
         }
+        #endif
+        #if DEBUG
+        if cam.isRecording { Text("reconnects \(ls.streamer.reconnects)").font(.caption2).foregroundStyle(.tertiary).accessibilityIdentifier("reconnects") }
         #endif
         if cam.isRecording, let m = ls.streamer.limitedKbps {            // слабкий інтернет: бітрейт підлаштований
             Text(String(format: "Слабкий інтернет (≈%.1f Мбіт/с): ефір %.1f Мбіт/с, без відставання", Double(m) / 1000, Double(ls.streamer.bitrateKbps) / 1000))

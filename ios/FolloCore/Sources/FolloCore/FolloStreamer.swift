@@ -17,7 +17,7 @@ public final class FolloStreamer: @unchecked Sendable {   // all state on `queue
         /// Automatic catch-up (found in the 90-min phone run: small Wi-Fi stalls added up to minutes of delay): when the
         /// stream is more than `autoCatchUpAboveS` behind and the connection has been steady for `steadyS`, send at
         /// `autoCatchUp` × real time until it is back under 1 s. 1.0 turns it off.
-        public var autoCatchUp = 1.25, autoCatchUpAboveS = 5.0, steadyS = 20.0
+        public var autoCatchUp = 1.25, autoCatchUpAboveS = 1.5, steadyS = 20.0     // 1.5 s: a short reconnect left 3–4 s behind for good (2026-10-17)
         /// Used only when the server sends no acknowledgements: after a drop, resend this much before the last frame the
         /// network stack took (those bytes may still have been in the system's send buffer). Duplicates beat a missed goal.
         public var resendMarginS = 8.0

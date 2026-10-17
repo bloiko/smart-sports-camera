@@ -232,6 +232,9 @@ final class FolloUITests: XCTestCase {
         shot("53 landscape, live, scrolled")
         wake(); stop.press(forDuration: 1.5)
         let done = app.buttons["resultDone"]
+        // the simulator's synthetic press in landscape sometimes does not land (its landscape screenshots are broken too):
+        // one retry, logged, so a real failure still fails
+        if !done.waitForExistence(timeout: 5) { print("LANDSCAPE STOP retry"); wake(); stop.press(forDuration: 2) }
         XCTAssertTrue(done.waitForExistence(timeout: 10)); shot("54 landscape, result"); done.tap()
         wait("ready after STOP", timeout: 5) { self.title == "Готово до гри" }
     }
@@ -259,5 +262,35 @@ final class FolloUITests: XCTestCase {
         wake(); app.descendants(matching: .any)["stop"].press(forDuration: 1.5)
         let done = app.buttons["resultDone"]
         XCTAssertTrue(done.waitForExistence(timeout: 10)); done.tap()
+    }
+
+    /// 2026-10-17: a one-second trip to the background (swipe, notification) made iOS suspend the app and close the
+    /// socket: a reconnect and 3 s of delay. A background task keeps the connection. Before/after: --no-bg-task.
+    func backgroundTrip(extra: [String]) -> Int {
+        fakePost("/_reset")
+        app.terminate()
+        app.launchArguments = ["--autostart", "--video", "m2.mp4", "--streamer", "follo", "--youtube-api", fake] + extra
+        app.launch()
+        goLiveWhenReady()
+        let rc = app.staticTexts["reconnects"]
+        XCTAssertTrue(rc.waitForExistence(timeout: 10))
+        RunLoop.current.run(until: Date().addingTimeInterval(12))           // publishing to the local receiver
+        let before = Int(rc.label.split(separator: " ").last ?? "") ?? -1
+        XCUIDevice.shared.press(.home)
+        RunLoop.current.run(until: Date().addingTimeInterval(5))
+        app.activate()
+        XCTAssertTrue(rc.waitForExistence(timeout: 10))
+        RunLoop.current.run(until: Date().addingTimeInterval(10))
+        let after = Int(rc.label.split(separator: " ").last ?? "") ?? -1
+        print("BGTRIP \(extra.isEmpty ? "with background task" : "without (--no-bg-task)"): reconnects \(before) → \(after)")
+        wake(); app.descendants(matching: .any)["stop"].press(forDuration: 1.5)
+        let done = app.buttons["resultDone"]
+        if done.waitForExistence(timeout: 10) { done.tap() }
+        return after - before
+    }
+
+    func test8a_BackgroundTripBefore() { _ = backgroundTrip(extra: ["--no-bg-task"]) }        // reference: what happened before
+    func test8b_BackgroundTripKeepsConnection() {
+        XCTAssertEqual(backgroundTrip(extra: []), 0, "a 5 s trip to the background must not cost a reconnect")
     }
 }

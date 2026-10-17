@@ -32,6 +32,11 @@ PLAYER_EVERY, PLAYER_IMGSZ, PLAYER_TILES = 4, 1280, 2   # 2 плитки: на �
 BALL_EVERY, ROI, ROI_UP, BALL_CONF, BALL_CONF_NEAR, LOST_ROIS = 2, 320, 2, 0.4, 0.25, 2
 # experiments without editing the file: LIVE_LOST_ROIS=3 LIVE_BALL_CONF=0.3 python src/live_sim.py …
 LOST_ROIS, BALL_CONF = int(os.environ.get('LIVE_LOST_ROIS', LOST_ROIS)), float(os.environ.get('LIVE_BALL_CONF', BALL_CONF))
+# BALL_NET=NAME: our own FolloNet-B (work/ballnet/NAME/best.pt, src/ballnet_live.py) instead of the YOLO ball model on the
+# same ROIs; its heatmap peaks are not calibrated like YOLO confidences, so its thresholds are its own (0.3 / 0.2)
+BALL_NET = os.environ.get('BALL_NET')
+if BALL_NET:
+    BALL_CONF = float(os.environ.get('LIVE_BALL_CONF', 0.3)); BALL_CONF_NEAR = float(os.environ.get('LIVE_BALL_CONF_NEAR', 0.2))
 BALL_MODEL = os.path.join(ROOT, 'models', 'ball_v02.pt')
 BG_EVERY_S, BG_N, BG_MIN = 3.0, 9, 15
 # Повернення до загубленого м'яча: кандидат далеко від гравців (ISO_NEAR зростів) або від центру гри (ISO_FAR px)
@@ -62,7 +67,13 @@ def detect(video, out_path):
     import torch
     from ultralytics import YOLO
     dev = 'mps' if torch.backends.mps.is_available() else 'cpu'
-    pm, bm = YOLO('yolo11s.pt'), YOLO(BALL_MODEL)
+    pm = YOLO('yolo11s.pt')
+    if BALL_NET:
+        from ballnet_live import BallNetLive
+        bnet, bm = BallNetLive(BALL_NET, dev), None; print(f'ball: own network {BALL_NET} ({bnet.inputs})', flush=True)
+    else:
+        bnet, bm = None, YOLO(BALL_MODEL)
+    ring = collections.deque(maxlen=3)                             # frames t-2, t-1, t for the own ball network
     fm, _ = field_mask(video, until_s=PREROLL_S); fmd = cv2.dilate(fm, np.ones((41, 41), np.uint8))
     cap = cv2.VideoCapture(video); fps = cap.get(5); N = int(cap.get(7)); H, W = int(cap.get(4)), int(cap.get(3))
     bg_frames = collections.deque(maxlen=BG_N); last_bg = -1e9
@@ -86,7 +97,7 @@ def detect(video, out_path):
     for f in range(N):
         ok, img = cap.read()
         if not ok: break
-        rec = {'frame': f}
+        rec = {'frame': f}; ring.append(img)
         if f / fps - last_bg >= BG_EVERY_S:                       # фон: медіана останніх кадрів (зменшених)
             bg_frames.append(cv2.resize(img, (W // 2, H // 2))); last_bg = f / fps
         if f % PLAYER_EVERY == 0:
@@ -127,6 +138,10 @@ def detect(video, out_path):
             bs = []; rec['roi'] = []
             for c in rois:
                 x0 = int(np.clip(c[0] - ROI / 2, 0, W - ROI)); y0 = int(np.clip(c[1] - ROI / 2, 0, H - ROI)); rec['roi'].append([x0, y0])
+                if bnet:                                          # own network: native ROI, 3 frames, prior at the target
+                    for bx, by, sc in bnet.detect(ring, x0, y0, ROI, c):
+                        bs.append([round(bx - 4, 1), round(by - 4, 1), round(bx + 4, 1), round(by + 4, 1), round(sc, 3), bg_diff(img, bx, by)])
+                    continue
                 patch = cv2.resize(img[y0:y0 + ROI, x0:x0 + ROI], None, fx=ROI_UP, fy=ROI_UP, interpolation=cv2.INTER_CUBIC)
                 r = bm.predict(patch, imgsz=ROI * ROI_UP, conf=0.1, device=dev, half=dev != 'cpu', verbose=False)[0]
                 for bb, sc in zip(r.boxes.xyxy.tolist(), r.boxes.conf.tolist()):

@@ -686,3 +686,31 @@ next to today's ball model:
 - For the phone this is simpler: 10 input channels instead of 13, and no median frame to keep.
 - Still open: about a fifth of the hits on m3 are more than 4 px off. The noprior run tells whether a wrong tracker
   prior causes it.
+
+## FolloNet-B in the live simulator (2026-10-18)
+
+**Setup.**
+- `BALL_NET=nobg python src/live_sim.py …`: our network replaces the YOLO ball model on the same ROIs.
+  - Input: 3 native frames plus the prediction as prior.
+  - Thresholds: 0.3 and 0.2.
+  - Code: `src/ballnet_live.py`. The players model is unchanged.
+- Baseline: the same YOLO detections (`live_pre/live_det.jsonl`) rerun through the **current** camera code
+  (`work/mN/live_yolo_now`). The old `live_pre/run.log` numbers came from older camera code and overstated the
+  smoothness gap.
+
+| m3, unseen stadium, buffer 2 s | YOLO | FolloNet-B nobg |
+| --- | --- | --- |
+| Ball found on ball passes | 8.5% | **31.0%** |
+| Reference ball in crop | 0.722 | **0.847** |
+| first 2 min | 0.771 | 0.800 |
+| pan_mean / pan_over_900 / acc_p95 | 80.2 / 1.36 / 188 | 85.8 / 1.22 / 204 |
+| Checklist | 2/2 | 2/2 |
+
+- **Gain: the camera shows the ball more often**, +12.5 points on the unseen stadium. Smoothness is about the same.
+- **Frames:** the goal at 2:04 has the goal mouth in frame in both versions (`work/ballnet/frames/m3_goal_2m04.jpg`).
+- **Speed:** on the Mac, PyTorch MPS takes 56 ms per ROI (while training runs). That is not the phone number: Core ML
+  on the Neural Engine is 2.25 ms.
+- **m1/m2** (seen in training except the last 20%) — YOLO with the current code:
+  - m1: ball in crop 0.941, checklist 1/1;
+  - m2: ball in crop 0.923, checklist 4/4.
+  - Own-network runs are in progress.

@@ -606,3 +606,34 @@ so the socket to YouTube stays open; `--no-bg-task` switches it off for before/a
 - The UI test (`test8b`) found a crash in the first version: `Int(backgroundTimeRemaining)` of iOS's "infinite" value.
   It is fixed.
 - Before/after needs the phone: a 1–5 s swipe out during a match, with and without `--no-bg-task`.
+
+## FolloNet-B probe: own ball network vs today's YOLO ball model (started 2026-10-17)
+
+**Setup.**
+- Samples (`src/ballnet_data.py`): 256×256 native crops from m1–m3, as 3 frames + background + ball position.
+  - Positives: the v0.3 offline track plus linear interpolation between track points (interpolated frames are where no
+    detector looked).
+  - Negatives: live YOLO false positives, spare balls, players' feet.
+  - Sizes: m1 2434, m2 3174, m3 1470 crops.
+- Labels checked on contact sheets (`src/ballnet_sheet.py`):
+  - interpolated positives sit on the ball;
+  - YOLO false positives are logo letters ("of"), bottles, cones and many spare balls by the touchline.
+- Our network (`src/ballnet.py`): 0.50 M params, own code, from scratch, stride-2 heatmap plus offset.
+- Training: m1+m2 (first 80%), 25 epochs on the M1 (≈6.5 min per epoch).
+- m3 is never seen in training: it is the "unseen match".
+- Ablations: full (3 frames + background + tracker prior), nobg, noprior, f1 (a single frame, like YOLO's input).
+
+**Baseline: `models/ball_v02.pt` on the same crops** (frame t upscaled 2×, as live; `src/ballnet_yolo.py`),
+threshold 0.4:
+
+| Match / part | Recall ≤ 4 px | on interpolated frames | false alarms: player feet | false alarms: spare balls |
+| --- | --- | --- | --- | --- |
+| m1 last 20% | 0.79 | 0.76 | 0.08 | 0.90 |
+| m2 last 20% | 0.71 | 0.69 | 0.10 | — |
+| m3 (all; the unseen stadium) | 0.23 | 0.21 | 0.06 | 0.43 |
+
+Caveats:
+- False alarms on the "fp" crops are high for YOLO by construction: those crops are YOLO's own false positives.
+- The labels come from the offline pipeline, which itself uses this YOLO model, so the comparison favours YOLO on track
+  frames.
+- Our network after 1 epoch (m1+m2 last 20%): recall 0.54, false alarms 0.035.

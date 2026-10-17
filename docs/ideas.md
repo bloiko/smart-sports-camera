@@ -137,6 +137,36 @@ Path, if it is ever chosen:
 3. Add zoom.
 4. Add the fallback to A's virtual camera.
 
+## 3b. Own motorised pan head instead of a DockKit stand (discussed 2026-10-18)
+
+- **Why not DockKit.** DockKit itself cannot be home-made: it is an Apple MFi programme for certified makers.
+- **What works instead.** Follo can control any Bluetooth LE device through CoreBluetooth (a system framework, no MFi).
+
+| Part | Role | Cost |
+| --- | --- | --- |
+| ESP32-C3 | Receives "turn to angle X" over BLE, runs a smooth motion profile | ~$4 |
+| NEMA17 pancake stepper + TMC2209 driver | Quiet, precise, smooth at low speed | ~$15 |
+| Timing belt, 1:3–1:5 reduction | Smoothness and torque against wind | ~$6 |
+| AS5600 magnetic angle sensor | Absolute angle: calibration without drift | ~$3 |
+| USB-C PD trigger board | Power from an ordinary power bank | ~$3 |
+| Bearing, 1/4" tripod mount, phone clamp (3D print or aluminium) | Mechanics | ~$10 |
+
+- **Cost:** about $40–50 in total, against $100–200 for a commercial stand. Almost no soldering.
+- **Work split:** Claude writes the firmware (own code) and the Follo control; the owner assembles.
+- **Further simplification: one phone, two cameras.**
+  - AVCaptureMultiCamSession on one iPhone: the ultra-wide finds the ball, the 1×/2× camera gives the 1080p stream.
+  - The phone on the motor turns itself; the angle sensor tells the tracker how far.
+  - Costs: more heat, limited resolution per camera.
+- **Hard parts:**
+  - smooth motion (the firmware ramps; the phone sends targets 20–30 times a second);
+  - predicting the ball ~0.5 s ahead;
+  - wind and stability.
+  - Pan only at first: tilt is rarely needed from one spot.
+- **Path:**
+  1. Simulate a "virtual motor" on the Mac on real footage.
+  2. Parts and firmware, pan only.
+  3. Two cameras of one phone.
+
 ## 4. Single-phone quality options (also only discussed)
 
 The half-pitch 1× mode is the one item from this discussion that exists: a test mode, 2026-10-18.

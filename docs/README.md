@@ -16,6 +16,7 @@ Documents here change rarely. Current state, numbers and to-do lists live in [`.
 | [run-on-iphone.md](run-on-iphone.md) | Build and run the app on your own iPhone with a free Apple ID |
 | [live-edge-cases.md](live-edge-cases.md) | What can go wrong during a live stream and how the app handles it; phase 3 feature checklist with status |
 | [youtube-live.md](youtube-live.md) | Streaming a test video to YouTube from the Mac: Google Cloud setup, `golive.py`, what the app will do |
+| [ideas.md](ideas.md) | Ideas only discussed with the owner (mega features, several iPhones, a motorised tele phone); nobody works on them |
 | [research/](research/README.md) | October 2026 research with sources |
 
 Original planning documents in Ukrainian (claude.ai): [requirements, risks, business plan](https://claude.ai/code/artifact/4c61eb7d-c884-46d9-8428-a00f37bd8317) and [phases and testing](https://claude.ai/code/artifact/1eba52cf-732b-4f92-8eef-19d2174ed380). This folder supersedes them.

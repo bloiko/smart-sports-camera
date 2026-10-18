@@ -36,7 +36,14 @@ enum DebugLog {
         return r == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1
     }
 
-    static func reset() { try? FileManager.default.removeItem(at: dir.appendingPathComponent("log.txt")); log("app start \(UIDevice.current.systemVersion), build \(build)") }
+    /// Новий лог на кожен запуск, але 5 попередніх лишаються (log_1.txt — найсвіжіший): 18.10 перезапуск о 14:15 стер лог
+    /// трансляції о 14:09.
+    static func reset() {
+        let fm = FileManager.default, name = { (i: Int) in dir.appendingPathComponent(i == 0 ? "log.txt" : "log_\(i).txt") }
+        try? fm.removeItem(at: name(5))
+        for i in stride(from: 4, through: 0, by: -1) { try? fm.moveItem(at: name(i), to: name(i + 1)) }
+        log("app start \(UIDevice.current.systemVersion), build \(build)")
+    }
 
     /// Which build runs on the phone: the time the app binary was built ("17.10 01:20"), shown in the log and on
     /// "Мої матчі" (the version number stays 1.0 (1) during development).

@@ -747,3 +747,12 @@ next to today's ball model:
   button; log shows `mode: half pitch, 1×` → `mode: whole pitch, 0.5×`.
 - xcodebuild sometimes hangs for minutes after "Selected tests passed" under load; the results are already final.
 - Debug build installed on the owner's iPhone 15. Default stays: whole pitch 0.5×, HaishinKit/Follo switch unchanged.
+
+## First real match, 2026-10-18: what came back from the phone
+
+- Pulled to `work/phone_2026-10-18/` (git-ignored): one match only, `match_2026-10-18_14-09-08`, 100 s of 4K HEVC
+  (3840×2160, 30 fps, 351 MB), YouTube link youtu.be/dSOqoZm0UC4; camera path 93 s, ball found in 205 of 1990 rows.
+- The log of that broadcast is lost: `DebugLog.reset()` deleted log.txt on every app start, and the app was opened
+  again at 14:15. That launch: position check in 14 s, "left goal may be out of frame", app sent to the background at
+  14:15:50, not opened again until 18:41.
+- Fix: the 5 previous logs are kept as log_1…log_5.txt (built, not yet installed on the phone).

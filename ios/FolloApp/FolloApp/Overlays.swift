@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit.UIGestureRecognizerSubclass
 import Combine
 import AVFoundation
 
@@ -24,19 +25,25 @@ struct TouchWatcher: UIViewRepresentable {
     func makeUIView(context: Context) -> WatcherView { let v = WatcherView(); v.onTouch = onTouch; v.isUserInteractionEnabled = false; return v }
     func updateUIView(_ v: WatcherView, context: Context) { v.onTouch = onTouch }
 
-    final class WatcherView: UIView, UIGestureRecognizerDelegate {
+    final class WatcherView: UIView {
         var onTouch: (() -> Void)?
-        private var rec: UILongPressGestureRecognizer?
+        private var rec: TouchSpy?
         override func didMoveToWindow() {
             super.didMoveToWindow()
             if let r = rec { r.view?.removeGestureRecognizer(r); rec = nil }
             guard let w = window else { return }
-            let r = UILongPressGestureRecognizer(target: self, action: #selector(touched)); r.minimumPressDuration = 0
-            r.cancelsTouchesInView = false; r.delaysTouchesBegan = false; r.delaysTouchesEnded = false; r.delegate = self
+            let r = TouchSpy(); r.onTouch = { [weak self] in self?.onTouch?() }
+            r.cancelsTouchesInView = false; r.delaysTouchesBegan = false; r.delaysTouchesEnded = false
             w.addGestureRecognizer(r); rec = r
         }
-        @objc private func touched() { onTouch?() }
-        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
+
+    /// Notes the touch and fails at once, so it never competes with anything. The first version, a long-press
+    /// recognizer that began on every touch, stopped system switches (UISwitch, segmented controls) from
+    /// toggling (UI test 9, 2026-10-18).
+    final class TouchSpy: UIGestureRecognizer {
+        var onTouch: (() -> Void)?
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) { onTouch?(); state = .failed }
     }
 }
 

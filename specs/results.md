@@ -738,3 +738,12 @@ next to today's ball model:
   grass) flies over the grass at 3–15 px per frame, with motion blur. Checked on a contact sheet
   (`work/ballnet/synth_sheet.jpg`).
 - **Then:** crop evaluation, then the live simulator on m3, m2, m1 with the checklists.
+
+## Match-day check before the first real match (2026-10-18)
+
+- UI tests on the iPhone 17 simulator, foreground, one group at a time: 1, 2, 3, 4, 5, 6, 7, 8b, 9 all passed
+  (8a is the reference run without the background task). 8b: 0 reconnects on a 5 s trip to the background.
+- Fixed: the half-pitch mode could not be switched back to the whole pitch (segmented Picker, then Toggle). Now a
+  button; log shows `mode: half pitch, 1×` → `mode: whole pitch, 0.5×`.
+- xcodebuild sometimes hangs for minutes after "Selected tests passed" under load; the results are already final.
+- Debug build installed on the owner's iPhone 15. Default stays: whole pitch 0.5×, HaishinKit/Follo switch unchanged.

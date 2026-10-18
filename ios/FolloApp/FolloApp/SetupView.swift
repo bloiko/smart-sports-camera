@@ -258,11 +258,14 @@ struct SetupView: View {
         if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
         if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
         if !cam.isRecording {
-            Picker("Режим", selection: Binding(get: { halfPitch }, set: { v in
-                halfPitch = v; UserDefaults.standard.set(v, forKey: "mode.halfPitch")
-                if cam.testVideo == nil { cam.switchCamera(wide: v) }; ls.runner.resetPosition(); DebugLog.log("mode: \(v ? "half pitch, 1×" : "whole pitch, 0.5×")")
-            })) { Text("Все поле (0,5×)").tag(false); Text("Пів поля (1×, тест)").tag(true) }
-                .pickerStyle(.segmented).accessibilityIdentifier("modePicker")
+            // звичайна кнопка: ні сегментний Picker, ні Toggle тут не перемикались (UI-тест 9, 2026-10-18)
+            Button { halfPitch.toggle() } label: {
+                Label(halfPitch ? "Пів поля (1×, тест): УВІМКНЕНО" : "Пів поля (1×, тест): вимкнено", systemImage: halfPitch ? "checkmark.square" : "square")
+            }.font(.footnote).accessibilityIdentifier("halfPitch").accessibilityValue(halfPitch ? "1" : "0")
+                .onChange(of: halfPitch) { _, v in
+                    UserDefaults.standard.set(v, forKey: "mode.halfPitch")
+                    if cam.testVideo == nil { cam.switchCamera(wide: v) }; ls.runner.resetPosition(); DebugLog.log("mode: \(v ? "half pitch, 1×" : "whole pitch, 0.5×")")
+                }
         }
         if !cam.isRecording, !halfPitch, (ls.runner.env?.positionProblem ?? "").contains("too small") || cam.useWide {
             Button(cam.useWide ? "Назад до 0.5× (ультраширока)" : "Поле замале → спробувати камеру 1×") {

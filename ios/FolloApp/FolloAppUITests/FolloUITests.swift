@@ -297,15 +297,19 @@ final class FolloUITests: XCTestCase {
     /// Owner (2026-10-17): a 1× "half pitch" mode to compare picture quality. Only in this mode the second goal may be
     /// out of frame; the pitch itself must still be found.
     func test9_HalfPitchMode() {
-        let picker = app.segmentedControls["modePicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        picker.buttons["Пів поля (1×, тест)"].tap()
+        let sw = app.buttons["halfPitch"]
+        XCTAssertTrue(sw.waitForExistence(timeout: 10))
+        if (sw.value as? String) == "1" { sw.tap() }       // start from the whole pitch
+        sw.tap()
+        wait("half mode on", timeout: 5) { (sw.value as? String) == "1" }
         let go = app.buttons["goLive"]
         wait("pitch found in half mode", timeout: 300) { go.isEnabled }
         XCTAssertTrue(app.staticTexts["status"].label.hasPrefix("Пів поля"), app.staticTexts["status"].label)
         allInsideScreen("half-pitch setup")
         shot("70 half pitch mode")
-        picker.buttons["Все поле (0,5×)"].tap()                              // back to the normal mode for the next tests
-        XCTAssertTrue(picker.buttons["Все поле (0,5×)"].isSelected)
+        sw.tap()                                          // back to the whole pitch
+        wait("half mode off", timeout: 5) { (sw.value as? String) == "0" }
+        wait("half-pitch status gone", timeout: 15) { !self.app.staticTexts["status"].label.hasPrefix("Пів поля") }
+        shot("71 back to whole pitch")
     }
 }

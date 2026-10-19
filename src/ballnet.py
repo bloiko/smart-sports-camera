@@ -204,6 +204,7 @@ def train(name):
     sampler = torch.utils.data.WeightedRandomSampler(w, num_samples=len(tr), replacement=True)
     dl = torch.utils.data.DataLoader(tr, batch_size=bs, sampler=sampler, num_workers=4, persistent_workers=True, drop_last=True)
     vl = torch.utils.data.DataLoader(va, batch_size=64, num_workers=4)
+    if '--seed' in sys.argv: torch.manual_seed(int(opt('--seed', 0))); np.random.seed(int(opt('--seed', 0)))   # v5: two seeds = training noise
     model = BallNet(channels(inputs)).to(dev)
     optim = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(optim, max_lr=2e-3, total_steps=epochs * len(dl), pct_start=0.1)
@@ -245,7 +246,7 @@ def eval_cmd(name):
             r = score(evaluate(model, torch.utils.data.DataLoader(ds, batch_size=64, num_workers=4), dev))
             res[f'{m}_{split or "all"}'] = r
             print(name, m, split or 'all', json.dumps({k: round(v, 3) if isinstance(v, float) else v for k, v in r.items()}), flush=True)
-    json.dump(res, open(f'{out}/eval.json', 'w'), indent=1)
+    json.dump(res, open(f"{out}/{opt('--eval-name', 'eval')}.json", 'w'), indent=1)   # --eval-name: other data, same model
 
 if __name__ == '__main__':
     {'train': train, 'eval': eval_cmd}[sys.argv[1]](sys.argv[2])

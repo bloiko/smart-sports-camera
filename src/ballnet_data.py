@@ -15,7 +15,7 @@ Labels (teacher data on the Mac, never shipped):
   - player negatives: crops around players' feet away from the ball.
 Split: frames before 80% of the video → train, after → val (held-out minutes, project rule).
 
-Usage: python src/ballnet_data.py work/m2 work/ballds/m2 [--max-pos 3000]
+Usage: python src/ballnet_data.py work/m2 work/ballds/m2 [--max-pos 3000] [--fast] [--clean-feet] [--more-feet]
 Resumable: a finished match leaves OUT/done; delete it to rebuild.
 """
 import cv2, json, numpy as np, os, random, sys
@@ -47,20 +47,31 @@ for a, b in zip(ks, ks[1:]):
         for f in range(a + 1, b):
             truth[f] = list(pa + (pb - pa) * (f - a) / (b - a)); interp.add(f)
 
+def at_feet(rec, q):
+    """q inside the lower 35% of a person box (boots and socks), a few px of margin."""
+    for p in rec.get('persons') or []:
+        h = p[3] - p[1]
+        if p[0] - 4 <= q[0] <= p[2] + 4 and p[3] - 0.35 * h <= q[1] <= p[3] + 6: return True
+    return False
+
 # --fast (v3, 2026-10-18): fast passes were missing (track points 30 frames apart, interpolation only ≤ 10), and the
 # network lost a fast far pass at m2 0:10. Inside gaps of up to 60 frames, take the live YOLO tracker's accepted ball
 # where it lies within 20 px of the line between the two track points: two independent sources agree.
 if '--fast' in sys.argv:
     live_ball = {r['frame']: r['ball'] for r in live if 'ball' in r}
-    added = 0
+    added = dropped = 0
     for a, b in zip(ks, ks[1:]):
         if b - a <= 10 or b - a > 60: continue
         pa, pb = np.array(track[a]), np.array(track[b])
         for f in range(a + 1, b):
             if f in live_ball:
                 q = np.array(live_ball[f]); lin = pa + (pb - pa) * (f - a) / (b - a)
-                if np.linalg.norm(q - lin) < 20: truth[f] = list(q); interp.add(f); added += 1
-    print('fast-pass positives from live YOLO agreeing with the track line:', added, flush=True)
+                if np.linalg.norm(q - lin) >= 20: continue
+                # --clean-feet (v5, 2026-10-19): v4 learnt "white spot at a player's feet = ball" (m1 2:54.8, m3 1:25.0);
+                # 29% of the m2 fast positives sat at a player's feet. Drop those.
+                if '--clean-feet' in sys.argv and at_feet(live[f] if f < len(live) else {}, q): dropped += 1; continue
+                truth[f] = list(q); interp.add(f); added += 1
+    print('fast-pass positives from live YOLO agreeing with the track line:', added, 'dropped at feet:', dropped, flush=True)
 
 def cands(rec):
     return [((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, b[4] if len(b) > 4 else 1.0) for b in rec.get('balls') or []]
@@ -82,7 +93,13 @@ for r in live:
     for x, y, c in cands(r):
         if c >= 0.25 and np.linalg.norm(t - (x, y)) > 30:
             jobs.setdefault(f, []).append(('fp', (x, y), t if np.max(np.abs(t - (x, y))) < S / 2 - 8 else None))
-    if rng.random() < 0.25 and r.get('persons'):               # a player's feet away from the ball
+    if '--more-feet' in sys.argv and r.get('persons'):         # v5: up to 3 players per frame, far (small) ones first,
+        if rng.random() < 0.6:                                    # boots or socks
+            ps = sorted(r['persons'], key=lambda p: (p[3] - p[1]) * rng.uniform(0.7, 1.3))[:3]
+            for p in ps:
+                h = p[3] - p[1]; foot = ((p[0] + p[2]) / 2 + rng.uniform(-0.2, 0.2) * (p[2] - p[0]), p[3] - rng.uniform(0, 0.2) * h)
+                if np.linalg.norm(t - foot) > 60: jobs.setdefault(f, []).append(('player', foot, t if np.max(np.abs(t - foot)) < S / 2 - 8 else None))
+    elif rng.random() < 0.25 and r.get('persons'):             # a player's feet away from the ball
         p = rng.choice(r['persons']); foot = ((p[0] + p[2]) / 2, p[3])
         if np.linalg.norm(t - foot) > 60:
             jobs.setdefault(f, []).append(('player', foot, None))

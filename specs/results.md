@@ -828,3 +828,16 @@ injury stoppage; real play only from ~1:06.
   gain is training data from the owner's own full matches (auto-labelled offline by the teacher + v0.3 tracker).
 - Separate finding: the recording has 2044 frames in 97 s = **21 fps on average instead of 30**: the phone dropped
   frames during the broadcast. To investigate before the next match.
+
+## Why the 18.10 recording had 21 fps, and the fix (2026-10-19)
+
+- Frame gaps in chunk_001.mp4: 1540 single steps, 247 double, 236 triple, ~5 drops every second for the whole
+  recording; the phone's path.csv also has ~21 rows a second. So frames were lost before the recorder: detection,
+  the live camera and the output crop all ran on the camera queue (~47 ms a frame), and AVCaptureVideoDataOutput
+  (alwaysDiscardsLateVideoFrames) threw away the late camera frames.
+- Fix: the camera queue only records and copies the frame; LiveCameraRunner processes on its own queue
+  (`follo.pipeline`) with at most 2 frames waiting; a frame it cannot take is skipped for the stream only, the file
+  keeps it. `--sync-pipeline` (debug) restores the old way for a before/after on the phone.
+- New log lines every 10 s: `frames …: delivered N (fps), dropped late / out of buffers / other, recorder busy,
+  handler ms`, and every 300 frames `pipeline: avg / max ms, skipped for the stream`.
+- Simulator: UI tests 1, 7, 8b pass. Not yet measured on the phone.

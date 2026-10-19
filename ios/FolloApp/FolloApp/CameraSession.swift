@@ -1,6 +1,7 @@
 import AVFoundation
 import UIKit
 import CoreImage
+import QuartzCore
 import Combine
 import FolloCore
 
@@ -9,6 +10,7 @@ final class CameraSession: NSObject, ObservableObject {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "camera")
     private var writer: ChunkWriter?
+    private var stats = FrameStats()
     @Published var isRecording = false
     @Published var chunkCount = 0
     @Published var frameHandler: ((CMSampleBuffer) -> Void)?
@@ -244,10 +246,19 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
         handle(sampleBuffer)
     }
 
+    /// Frames iOS threw away before handing them to us (late: our callback was too slow; out of buffers: we held them).
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let r = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_DroppedFrameReason, attachmentModeOut: nil) as? String
+        if r == (kCMSampleBufferDroppedFrameReason_FrameWasLate as String) { stats.late += 1 }
+        else if r == (kCMSampleBufferDroppedFrameReason_OutOfBuffers as String) { stats.noBuffers += 1 } else { stats.other += 1 }
+    }
+
     /// Один кадр з камери або з тестового відео: запис, конвеєр, прев'ю. На черзі камери.
     func handle(_ sampleBuffer: CMSampleBuffer) {
         writer?.append(sampleBuffer)
+        let h0 = CACurrentMediaTime()
         frameHandler?(sampleBuffer)
+        stats.frame(handlerMs: (CACurrentMediaTime() - h0) * 1000, writerBusy: writer?.busy ?? 0, recording: writer != nil)
         previewCount += 1
         if previewCount % 15 == 0, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {   // прев'ю 5 fps, 960 px
             let ci = CIImage(cvPixelBuffer: pb).transformed(by: CGAffineTransform(scaleX: 0.25, y: 0.25))
@@ -275,6 +286,20 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             if previewCount == 6 { DebugLog.log("first frame \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) fmt \(CVPixelBufferGetPixelFormatType(pb))") }
         }
+    }
+}
+
+/// Every 10 s on the camera queue: where frames go (match 18.10: the 4K file had 21 fps instead of 30).
+struct FrameStats {
+    var late = 0, noBuffers = 0, other = 0
+    private var n = 0, ms = 0.0, maxMs = 0.0, start = CACurrentMediaTime(), busy0 = 0
+    mutating func frame(handlerMs: Double, writerBusy: Int, recording: Bool) {
+        n += 1; ms += handlerMs; maxMs = max(maxMs, handlerMs)
+        let dt = CACurrentMediaTime() - start
+        guard dt >= 10 else { return }
+        DebugLog.log(String(format: "frames %.0f s: delivered %d (%.1f fps), dropped late %d, out of buffers %d, other %d, recorder busy %d%@, handler avg %.1f ms max %.0f ms",
+                            dt, n, Double(n) / dt, late, noBuffers, other, max(0, writerBusy - busy0), recording ? "" : " (not recording)", ms / Double(n), maxMs))
+        self = FrameStats(); busy0 = writerBusy
     }
 }
 
@@ -319,8 +344,9 @@ final class ChunkWriter {
         let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)   // 4K з камери; тестове відео — свій розмір
         if writer == nil { open(at: t, w: w, h: h) }
         if let s = chunkStart, CMTimeGetSeconds(CMTimeSubtract(t, s)) >= chunkSeconds { finish(); open(at: t, w: w, h: h) }
-        if input?.isReadyForMoreMediaData == true { input?.append(sb) }
+        if input?.isReadyForMoreMediaData == true { input?.append(sb) } else { busy += 1 }   // encoder busy: frame lost in the file
     }
+    private(set) var busy = 0
 
     func finish() {
         guard let w = writer else { return }

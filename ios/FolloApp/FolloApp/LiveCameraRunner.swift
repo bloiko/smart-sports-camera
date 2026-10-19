@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreImage
+import QuartzCore
 import ImageIO
 import FolloCore
 
@@ -92,6 +93,7 @@ final class LiveCameraRunner {
 
     /// Після Стоп: траєкторія і кольори форми для хайлайтів (HighlightsRunner), потім звільнити пам'ять.
     func stop() -> (cam: LiveCamera, jerseys: [JerseySample])? {
+        pipeQueue.sync {}                                                  // let the frame in progress finish
         defer { pipe = nil; cam = nil; ring = [:]; try? pathLog?.close(); pathLog = nil }
         guard let cam = cam, let pipe = pipe else { return nil }
         cam.finish()
@@ -102,15 +104,45 @@ final class LiveCameraRunner {
     /// Thermal step (item 4): detect every 3rd frame instead of every 2nd when hot.
     func setDetectEvery(_ n: Int) { pipe?.ballEvery = n; pipe?.playerEvery = 2 * n }
 
+    /// Detection, camera and the output crop run here, not on the camera queue: on the camera queue they took ~47 ms a
+    /// frame and iOS discarded late camera frames before the recorder saw them (match 18.10: 4K file at 21 fps instead
+    /// of 30). Now the recorder gets every frame; when this queue is behind, a frame is skipped for the stream only.
+    /// `--sync-pipeline` (debug): the old way, everything on the camera queue, to compare before/after.
+    private let pipeQueue = DispatchQueue(label: "follo.pipeline", qos: .userInitiated)
+    static let syncPipeline = CommandLine.arguments.contains("--sync-pipeline")
+    private let pendingLock = NSLock()
+    private var pending = 0
+    private(set) var skipped = 0
+    private var procMs = 0.0, procMax = 0.0, procN = 0
+
     /// Every captured frame, on the camera queue.
     func push(_ sb: CMSampleBuffer) {
-        guard let pipe = pipe, let cam = cam, let pb = CMSampleBufferGetImageBuffer(sb) else { return }
+        guard pipe != nil, let pb = CMSampleBufferGetImageBuffer(sb) else { return }
         let t = CMSampleBufferGetPresentationTimeStamp(sb)
+        if Self.syncPipeline { process(src: pb, copy: copyFrame(pb), t: t); return }
+        pendingLock.lock()
+        if pending >= 2 { skipped += 1; pendingLock.unlock(); return }      // behind: this frame goes to the file only
+        pending += 1; pendingLock.unlock()
+        guard let copy = copyFrame(pb) else { pendingLock.lock(); pending -= 1; pendingLock.unlock(); return }
+        pipeQueue.async { [weak self] in
+            self?.process(src: copy, copy: copy, t: t)
+            self?.pendingLock.lock(); self?.pending -= 1; self?.pendingLock.unlock()
+        }
+    }
+
+    private func process(src pb: CVPixelBuffer, copy: CVPixelBuffer?, t: CMTime) {
+        guard let pipe = pipe, let cam = cam else { return }
+        let t0 = CACurrentMediaTime()
         let f = frame; frame += 1; inFrames += 1
-        if let copy = copyFrame(pb) { ring[f] = (copy, t) }
+        if let copy { ring[f] = (copy, t) }
         let rec = pipe.process(frame: f, image: CIImage(cvPixelBuffer: pb), grey: { Image8.grey(from: pb) }, patch: { Image8.bgrPatch(pb, x0: $0, y0: $1, w: $2, h: $3) })
         if rec.rois != nil { ballPasses += 1; if rec.ball != nil { ballFound += 1 } }
         cam.push(rec)
+        let ms = (CACurrentMediaTime() - t0) * 1000; procMs += ms; procMax = max(procMax, ms); procN += 1
+        if procN == 300 {
+            DebugLog.log(String(format: "pipeline%@: 300 frames, avg %.1f ms, max %.0f ms, skipped for the stream so far %d", Self.syncPipeline ? " (sync)" : "", procMs / 300, procMax, skipped))
+            procMs = 0; procMax = 0; procN = 0
+        }
     }
 
     private var pathLog: FileHandle?

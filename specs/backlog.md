@@ -2,9 +2,22 @@
 
 Living document. Ordered by priority; move finished items to `status.md` (Done) and note results in `results.md`.
 
-Last updated: 2026-10-12 (session 4: Core ML camera done)
+Last updated: 2026-10-19 (after the first real match: recording fps fix, FolloNet-B v5)
 
 ## P0: now
+
+### Phone: does the 4K recording keep 30 fps now? (owner on the phone, ~10 min; phone not available on 2026-10-19)
+- Install the build with the processing moved off the camera queue (commit 094fc59).
+- Two short test broadcasts (sound off, not public), about 2 min each, pointed at any pitch the position check accepts:
+  the new way, then the old way with `--sync-pipeline`.
+- Pull the log and the chunks: compare the `frames …` and `pipeline: …` lines and the frame gaps in the files.
+  Expected: the file at ~30 fps in the new way, ~21 fps in the old way; the stream no worse.
+- If no pitch is at hand, do it at the next match (new way only) and compare with the 18.10 file (21 fps).
+
+### Next match: film as long as possible on the whole pitch (owner)
+- A full half at least, even without a broadcast. Our nets are not ready for the owner's camera (results 2026-10-19:
+  YOLO 49% ball passes, nobg 4%, v5a 41% but jumpy); the owner's own footage is the training data they need.
+- After it: auto-label offline (teacher + v0.3 tracker), build a checklist of his moments, train on it.
 
 ### Phone check of the 2026-10-17 overnight work (owner on the phone, ~20 min)
 - **Sign-in and broadcast title:** sign in from onboarding or the setup screen; the broadcast title is the teams.

@@ -784,3 +784,29 @@ the normal prior mode):
   current net sees the real ball (1211, 422) going to the left goal; v4 misses it and takes the white socks of a player
   at the centre circle (1850, 350). Training data: 29% of the m2 fast-pass positives sit at a player's feet (ordinary
   track points: 16%); m1 10% vs 4%. One run per version, so part of the nobg/v4 difference may be training noise.
+
+## FolloNet-B v5 (2026-10-19): first net that keeps every checklist moment
+
+Data v5 = v3 fast passes minus those at a player's feet (`--clean-feet`: m1 5 of 44, m2 34 of 85, m3 1 of 22) plus
+boots/socks negatives, far players first (`--more-feet`: m1 94 → 685). Two seeds (v5a seed 1, v5b seed 2).
+
+Crops, all nets on the same v5 val crops (ball found / false alarms / false alarms at feet):
+
+| | nobg | v4 | v5a | v5b |
+| --- | --- | --- | --- | --- |
+| m1 | 0.790 / 0.014 / 0.026 | 0.780 / 0.016 / 0.031 | 0.810 / 0.016 / 0.031 | 0.799 / 0.019 / 0.031 |
+| m2 | 0.739 / 0.041 / 0.024 | 0.776 / 0.023 / 0.005 | 0.756 / 0.028 / 0.010 | 0.790 / 0.032 / 0.014 |
+| m3 unseen | 0.464 / 0.019 / 0.019 | 0.536 / 0.042 / 0.038 | 0.510 / 0.032 / 0.031 | 0.495 / **0.396** / 0.371 |
+
+Live simulator (buffer 2 s, normal prior mode), ball in crop / pan_mean / checklist:
+
+| | nobg | v4 | v5a | v5b |
+| --- | --- | --- | --- | --- |
+| m1 | 0.953 / 84 / 1/1 | 0.907 / 77 / 0/1 | 0.931 / 84 / **1/1** | 0.947 / 72 / 1/1 |
+| m2 | 0.969 / 89 / 3/4 | 0.943 / 115 / 3/4 | 0.966 / 95 / **4/4** | 0.926 / 96 / 4/4 |
+| m3 | 0.833 / 89 / 2/2 | 0.833 / 102 / 1/2 | **0.854** / 95 / **2/2** | 0.708 / 116 / 1/2 (1:25.0 17%) |
+
+- v5a: 7/7 checklist moments, the first net that keeps the m2 0:13.5 fast pass (0% with nobg). Frames
+  (compare_crops m2 0:11–0:15): v5a is at the right goal from 0:11, nobg only from 0:13.
+- v5b, same data, other seed: 40% false alarms on unseen m3 and loses m3 1:25.0. Training is not stable yet; v5a may be
+  a lucky seed. Needs a third seed and a match none of them has seen before v5a can replace nobg as the candidate.

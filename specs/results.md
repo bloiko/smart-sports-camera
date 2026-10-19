@@ -810,3 +810,21 @@ Live simulator (buffer 2 s, normal prior mode), ball in crop / pan_mean / checkl
   (compare_crops m2 0:11–0:15): v5a is at the right goal from 0:11, nobg only from 0:13.
 - v5b, same data, other seed: 40% false alarms on unseen m3 and loses m3 1:25.0. Training is not stable yet; v5a may be
   a lucky seed. Needs a third seed and a match none of them has seen before v5a can replace nobg as the candidate.
+
+## The owner's own footage (18.10, iPhone 15, 4K 0.5×, 97 s) in the live simulator (2026-10-19)
+
+`work/m4phone/` (git-ignored). Unseen by every net, no ground truth: judged by eye. About 65 s of the 97 s is an
+injury stoppage; real play only from ~1:06.
+
+| | ball found on ball passes | pan_mean | pan_over_900 |
+| --- | --- | --- | --- |
+| YOLO (today's default) | 49.2% | 66 | 0.49 |
+| nobg (current candidate) | **4.2%** | 38 | 0.78 |
+| v5a | 41.4% | **136** | **2.84** |
+
+- nobg is almost blind on the owner's camera. v5a finds the ball often but also fires on players' feet and on grass and
+  fence spots (frames at 33, 60, 75, 82, 94 s), so the camera is twice as jumpy as with YOLO. YOLO is the steadiest here.
+- Conclusion: trained on two panorama matches only, our nets do not yet generalise to the owner's phone. The next real
+  gain is training data from the owner's own full matches (auto-labelled offline by the teacher + v0.3 tracker).
+- Separate finding: the recording has 2044 frames in 97 s = **21 fps on average instead of 30**: the phone dropped
+  frames during the broadcast. To investigate before the next match.

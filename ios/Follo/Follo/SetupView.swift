@@ -143,7 +143,8 @@ struct SetupView: View {
                 status = ""; tilt.start()
                 // телефон повернули й він знову нерухомий: перевірити позицію ще раз, без кнопок
                 tilt.onSettled = { [cam, ls] in
-                    guard !cam.isRecording, ls.runner.env != nil else { return }
+                    // лише з камерою: тестове відео від руху телефона не змінюється (18.10: перевірка двічі даремно)
+                    guard !cam.isRecording, cam.testVideo == nil, ls.runner.env != nil else { return }
                     DebugLog.log("phone moved: checking the position again"); ls.runner.resetPosition()
                 }
             }
@@ -199,7 +200,11 @@ struct SetupView: View {
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
                 if Self.oldPositionUI { status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (halfPitch && positionOK ? "Пів поля (1×): видно частину поля, другі ворота поза кадром. Можна в ефір" : ls.runner.env?.positionProblem.map(Self.ukr) ?? "Поле в кадрі. Можна в ефір") }
-                else { checkTick &+= 1 } }
+                else {
+                    checkTick &+= 1
+                    // debug: нахил раз на 10 с до ефіру — чи правильно лінія горизонту показує напрям (перевірка на телефоні)
+                    if checkTick % 10 == 0, let a = tilt.tilt { DebugLog.log(String(format: "tilt %.1f° (horizon %@)%@", a, abs(a) <= PositionCheck.levelDeg ? "level" : "not level", tilt.portrait ? ", phone upright" : "")) }
+                } }
         }
     }
 

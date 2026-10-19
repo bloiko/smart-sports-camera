@@ -14,6 +14,12 @@ Last updated: 2026-10-19 (after the first real match: recording fps fix, FolloNe
   Expected: the file at ~30 fps in the new way, ~21 fps in the old way; the stream no worse.
 - If no pitch is at hand, do it at the next match (new way only) and compare with the 18.10 file (21 fps).
 
+### Phone: the new position check (with the fps check above)
+- Horizon line: put the phone level on the tripod; the line must be green and level; tilt it a few degrees both ways.
+- Turn the phone so one end of the pitch leaves the frame: arrow and "Поверни трохи ліворуч/праворуч"; turn back and
+  hold still: the check runs again by itself (log: "phone moved: checking the position again").
+- Compare with `--old-position-ui`.
+
 ### Next match: film as long as possible on the whole pitch (owner)
 - A full half at least, even without a broadcast. Our nets are not ready for the owner's camera (results 2026-10-19:
   YOLO 49% ball passes, nobg 4%, v5a 41% but jumpy); the owner's own footage is the training data they need.

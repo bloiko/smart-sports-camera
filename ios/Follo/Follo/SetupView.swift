@@ -9,12 +9,17 @@ struct CameraPreview: View {
     @ObservedObject var cam: CameraSession
     /// «Що бачить застосунок»: поза полем темно, дальні кути з воротами зелені (в кадрі) або червоні (поверни телефон).
     var overlay: PositionOverlay? = nil
+    /// Новий вигляд перевірки (2026-10-19): сітка, горизонт, контур поля, мітки кінців поля. nil — старий вигляд.
+    var check: PositionCheck? = nil
+    var tilt: Double? = nil
     var body: some View {
         ZStack {
             Color.black
             if let img = cam.previewImage {
                 Image(uiImage: img).resizable().scaledToFit()
-                if let ov = overlay {
+                if let check {
+                    PositionCanvas(overlay: overlay, check: check, tilt: tilt, imageSize: img.size)
+                } else if let ov = overlay {
                     Canvas { ctx, size in
                         let r = AVMakeRect(aspectRatio: CGSize(width: ov.w, height: ov.h), insideRect: CGRect(origin: .zero, size: size))
                         ctx.withCGContext { ov.draw(in: $0, rect: r) }
@@ -89,6 +94,11 @@ struct SetupView: View {
     @State var secondHalfAt: Date?                                         // скільки людей дивляться зараз (YouTube, раз на 30 с)
     @State var streamTask: Task<Void, Never>?                         // підключення ефіру з повторами (запис від нього не залежить)
     @State var lastDbg = ""
+    /// Старий вигляд перевірки позиції (до 2026-10-19), для порівняння: --old-position-ui.
+    static let oldPositionUI = CommandLine.arguments.contains("--old-position-ui")
+    @StateObject var tilt = TiltMonitor()
+    @State var checkTick = 0                                          // щосекунди: перемалювати висновок перевірки
+    @State var recordOnly = false                                     // «Тільки запис, без ефіру»
     // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
     @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @Environment(\.scenePhase) var scenePhase                                       // пункт 10
@@ -129,6 +139,14 @@ struct SetupView: View {
         .sheet(isPresented: $result) { ResultView(watchURL: live?.watchURL, clips: clips, progress: hlProgress, match: match) }
         .onAppear {
             DebugLog.reset(); UIDevice.current.isBatteryMonitoringEnabled = true
+            if !Self.oldPositionUI {
+                status = ""; tilt.start()
+                // телефон повернули й він знову нерухомий: перевірити позицію ще раз, без кнопок
+                tilt.onSettled = { [cam, ls] in
+                    guard !cam.isRecording, ls.runner.env != nil else { return }
+                    DebugLog.log("phone moved: checking the position again"); ls.runner.resetPosition()
+                }
+            }
             // debug: --video NAME з Mac або останній вибір у перемикачі
             if let i = CommandLine.arguments.firstIndex(of: "--video"), i + 1 < CommandLine.arguments.count { UserDefaults.standard.set(CommandLine.arguments[i + 1], forKey: "debug.testVideo") }
             if CommandLine.arguments.contains("--camera") { UserDefaults.standard.removeObject(forKey: "debug.testVideo") }
@@ -161,7 +179,7 @@ struct SetupView: View {
                 UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid; DebugLog.log("foreground again: background time released")
             }
         }
-        .onDisappear { cam.pause() }
+        .onDisappear { cam.pause(); tilt.stop() }
         .onChange(of: cam.sourceFps, initial: true) { _, f in ls.runner.fps = f }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in thermal = ProcessInfo.processInfo.thermalState }
         .onReceive(ticker) { _ in
@@ -180,14 +198,15 @@ struct SetupView: View {
                let n = Double(CommandLine.arguments[i + 1]), Date().timeIntervalSince(s) >= n { DebugLog.log("auto STOP after \(Int(n)) s"); stop() }
             if startedAt != nil { startedAt = startedAt; ls.tick(onFrameRate: { ls.streamer.setFrameRate($0) }, onDetectEvery: { ls.runner.setDetectEvery($0) }, onLowStorage: { cam.stopRecording() }, onEnd: { stop() }) }
             else if error == nil { let st = ls.runner.env == nil ? "preroll \(ls.runner.prerollCount)/7 building \(ls.runner.building)" : (ls.runner.env?.positionProblem ?? "pitch ok"); if st != lastDbg { DebugLog.log(st); lastDbg = st }
-                status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (halfPitch && positionOK ? "Пів поля (1×): видно частину поля, другі ворота поза кадром. Можна в ефір" : ls.runner.env?.positionProblem.map(Self.ukr) ?? "Поле в кадрі. Можна в ефір") }
+                if Self.oldPositionUI { status = ls.runner.env == nil ? "Перевіряю позицію: кадр \(ls.runner.prerollCount)/7\(ls.runner.building ? ", рахую поле…" : "")" : (halfPitch && positionOK ? "Пів поля (1×): видно частину поля, другі ворота поза кадром. Можна в ефір" : ls.runner.env?.positionProblem.map(Self.ukr) ?? "Поле в кадрі. Можна в ефір") }
+                else { checkTick &+= 1 } }
         }
     }
 
     @ViewBuilder var header: some View {
         HStack {
             if !cam.isRecording { Button { dismiss() } label: { Image(systemName: "chevron.left") }.accessibilityIdentifier("back") }
-            Spacer(); Text(cam.isRecording ? "LIVE" : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)).accessibilityIdentifier("title"); Spacer()
+            Spacer(); Text(cam.isRecording ? (recordOnly ? "ЗАПИС" : "LIVE") : "Готово до гри").font(.system(size: 28, weight: .heavy, design: .rounded)).accessibilityIdentifier("title"); Spacer()
         }
     }
 
@@ -196,7 +215,9 @@ struct SetupView: View {
             ViewerView(runner: ls.runner).frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
             Text("Так бачить глядач (без затримки YouTube). Не виходь із застосунку: камера зупиниться — дивись трансляцію на іншому телефоні.").font(.caption2).foregroundStyle(.secondary)
         } else {
-            CameraPreview(cam: cam, overlay: cam.isRecording ? nil : ls.runner.positionOverlay).frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
+            CameraPreview(cam: cam, overlay: cam.isRecording ? nil : ls.runner.positionOverlay,
+                          check: cam.isRecording || Self.oldPositionUI ? nil : positionCheck, tilt: tilt.tilt)
+            if !cam.isRecording && !Self.oldPositionUI { PositionCard(check: positionCheck) }   // висновок одразу під прев'ю.frame(maxWidth: .infinity).aspectRatio(16 / 9, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 14))
         }
         if cam.isRecording {
             HStack(spacing: 12) {
@@ -213,7 +234,7 @@ struct SetupView: View {
         HStack {
             stat(cam.isRecording ? "\(cam.chunkCount)" : "—", "файлів 4K")
             stat(thermalText, "телефон")
-            stat(startedAt.map { fmt(Date().timeIntervalSince($0)) } ?? "—", "у ефірі")
+            stat(startedAt.map { fmt(Date().timeIntervalSince($0)) } ?? "—", recordOnly && cam.isRecording ? "запис" : "у ефірі")
             stat(startedAt != nil ? "\(Int(ls.runner.ballShare * 100))%" : "—", "м'яч")
         }
         if cam.isRecording { ScoreBar(score: score); breakRow }
@@ -230,7 +251,13 @@ struct SetupView: View {
                 .padding(10).background(.white.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 10))
             if !l.broadcastId.isEmpty { livePrivacyRow(l) }
         }
-        Text(error ?? cam.cameraError ?? status).accessibilityIdentifier("status").font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
+        if cam.isRecording || Self.oldPositionUI {
+            Text(error ?? cam.cameraError ?? status).accessibilityIdentifier("status").font(.footnote).foregroundStyle(cam.cameraError == nil ? Color.secondary : Color.yellow).multilineTextAlignment(.center)
+        } else {
+            if let n = error ?? cam.cameraError ?? (status.isEmpty ? nil : status) {
+                Text(n).accessibilityIdentifier("statusNote").font(.footnote).foregroundStyle(error != nil || cam.cameraError != nil ? Color.yellow : Color.secondary).multilineTextAlignment(.center)
+            }
+        }
         if !cam.isRecording, !CameraSession.testVideos.isEmpty {      // лише debug: тестове відео замість камери
             Picker("Джерело", selection: Binding(get: { cam.testVideo }, set: { cam.setSource($0); ls.runner.resetPosition() })) {
                 Text("Камера").tag(URL?.none)
@@ -290,10 +317,18 @@ struct SetupView: View {
                     .onLongPressGesture(minimumDuration: 1, perform: { holdingStop = false; stop() }, onPressingChanged: { holdingStop = $0 })
                     .accessibilityIdentifier("stop").accessibilityAddTraits(.isButton)
             } else {
+                if !Self.oldPositionUI, ls.runner.env != nil, !positionOK {
+                    // позиція не та: ефіру не буде (правило власника), але матч не має пропасти — лише запис 4K
+                    Button("Тільки запис, без ефіру") { if stoppedAt.map({ Date().timeIntervalSince($0) > 3 }) ?? true { go(recordOnly: true) } }
+                        .accessibilityIdentifier("recordOnly").font(.system(size: 18, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity).padding(16).background(Color.white.opacity(0.1))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.35)))
+                } else {
                 // сіра, поки позиція не перевірена (вимкнена кнопка з червоним тлом виглядала активною)
                 Button(positionOK ? "●  GO LIVE" : "Перевіряю поле…") { if stoppedAt.map({ Date().timeIntervalSince($0) > 3 }) ?? true { go() } }
                     .disabled(!positionOK).accessibilityIdentifier("goLive")
                     .frame(maxWidth: .infinity).padding(16).background(positionOK ? Color.red : Color.gray.opacity(0.35))
+                }
             }
         }
             .font(.system(size: 22, weight: .heavy, design: .rounded)).foregroundStyle(.white)
@@ -308,20 +343,24 @@ struct SetupView: View {
         guard let p = e.positionProblem else { return true }
         return halfPitch && p.contains("goal")                       // пів поля: лише «ворота біля краю» не заважає
     }
+    /// Висновок перевірки позиції для нового вигляду (checkTick перемальовує його щосекунди).
+    var positionCheck: PositionCheck { _ = checkTick; return PositionCheck.make(runner: ls.runner, halfPitch: halfPitch, tilt: tilt, lowLight: cam.lowLight) }
     /// Тест: тестове відео замість камери або запуск з Mac. Правило власника: у тестах звук ефіру завжди вимкнений.
     var isTest: Bool { cam.testVideo != nil || CommandLine.arguments.contains("--autostart") }
 
-    func go(resume resumeAsked: Bool = false) {
-        guard positionOK else { DebugLog.log("GO LIVE refused: position not checked (\(ls.runner.env?.positionProblem ?? "no pitch yet"))"); return }
+    func go(resume resumeAsked: Bool = false, recordOnly only: Bool = false) {
+        recordOnly = only
+        if only { DebugLog.log("RECORD ONLY (no stream): \(ls.runner.env?.positionProblem ?? "no pitch yet")") }
+        guard positionOK || only else { DebugLog.log("GO LIVE refused: position not checked (\(ls.runner.env?.positionProblem ?? "no pitch yet"))"); return }
         if isTest && !muted { muted = true; ls.streamer.setMuted(true) }
         error = nil
         let problems = ls.preflight()
         if !problems.isEmpty && !resumeAsked { status = problems.joined(separator: " · ") }
         // матч, що лишився після перезапуску застосунку (Стоп не натискали): та сама папка, годинник і ефір (те саме посилання)
         let saved = ls.saved.flatMap { Date().timeIntervalSince($0.startedAt) < 3 * 3600 ? $0 : nil }
-        let resume = resumeAsked || (yt.signedIn && saved?.broadcastId.isEmpty == false)
+        let resume = !only && (resumeAsked || (yt.signedIn && saved?.broadcastId.isEmpty == false))
         // старий ефір після збою (автостоп вимкнено, сам YouTube його не закриє): закрити, щоб не висів «в ефірі»
-        if yt.signedIn, let old = ls.saved, !old.broadcastId.isEmpty, saved == nil {
+        if !only, yt.signedIn, let old = ls.saved, !old.broadcastId.isEmpty, saved == nil {
             let api = yt.api(); Task { try? await api.complete(old.broadcastId); DebugLog.log("YouTube: closed stale broadcast \(old.broadcastId)") }
         }
 
@@ -341,8 +380,12 @@ struct SetupView: View {
         cam.startRecording(dir: MatchStore.chunksDir(m)); startedAt = start
         DebugLog.log("recording into matches/\(folder)\(resume ? " (continuing)" : ""), mode \(halfPitch ? "half pitch 1×" : "whole pitch 0.5×"), lens \(cam.useWide ? "1×" : "0.5×")")
         // віртуальна камера: кроп 1920×1080 із затримкою 2 с → стрімер (і «погляд глядача», пункт 10)
-        ls.runner.onOutput = { [ls, breakFeed] pb, t in Task { @MainActor in guard !breakFeed.active else { return }; ls.streamer.push(pb, at: breakFeed.adjust(t)) } }
-        do { try ls.runner.start() } catch { self.error = "Камера: \(error.localizedDescription) (моделі players/ball.mlmodelc у проєкті?)" }
+        ls.runner.onOutput = only ? nil : { [ls, breakFeed] pb, t in Task { @MainActor in guard !breakFeed.active else { return }; ls.streamer.push(pb, at: breakFeed.adjust(t)) } }
+        // лише запис без знайденого поля: віртуальна камера не потрібна (їй потрібна маска поля)
+        if !only || ls.runner.env?.fm != nil {
+            do { try ls.runner.start() } catch { self.error = "Камера: \(error.localizedDescription) (моделі players/ball.mlmodelc у проєкті?)" }
+        }
+        if only { live = nil; status = "Лише запис 4K, без ефіру: позиція не та"; return }
 
         // 2. Ефір — окремо, з повторами, поки не вийде або поки не натиснуть СТОП (посилання попереднього матчу не показуємо)
         live = nil

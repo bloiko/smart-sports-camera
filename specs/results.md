@@ -841,3 +841,11 @@ injury stoppage; real play only from ~1:06.
 - New log lines every 10 s: `frames …: delivered N (fps), dropped late / out of buffers / other, recorder busy,
   handler ms`, and every 300 frames `pipeline: avg / max ms, skipped for the stream`.
 - Simulator: UI tests 1, 7, 8b pass. Not yet measured on the phone.
+
+## New pre-match position check (2026-10-19)
+
+- Simulator UI tests pass: 1 (GO LIVE/STOP), 6 (landscape), 9 (half pitch), 10 (new: m2 with the left end cut off →
+  "Поверни трохи ліворуч", no GO LIVE, "Тільки запис" records with the title "ЗАПИС" and no stream).
+- Not verified yet, needs the phone: the horizon line and "Телефон рівно" (no motion sensors in the simulator; the sign
+  of the tilt is derived from the sensor orientation, check that the line is level when the phone is), and the automatic
+  re-check after turning the phone.

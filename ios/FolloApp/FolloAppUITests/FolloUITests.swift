@@ -312,4 +312,31 @@ final class FolloUITests: XCTestCase {
         wait("half-pitch status gone", timeout: 15) { !self.app.staticTexts["status"].label.hasPrefix("Пів поля") }
         shot("71 back to whole pitch")
     }
+
+    /// Owner (2026-10-19): the position check says what is wrong in plain words ("ends of the pitch", not goals it does not
+    /// know), shows which way to turn, and a match is never lost: "record only" when the position is not right.
+    /// Video: m2 with the left 700 px cut off (ios/ui_test.sh makes it from work/ui_videos/m2left.mp4).
+    func test10_TurnLeftAndRecordOnly() {
+        app.terminate()
+        app.launchArguments = ["--autostart", "--video", "m2left.mp4", "--streamer", "follo"]
+        app.launch()
+        let status = app.staticTexts["status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 20))
+        shot("80 checking")
+        wait("turn left", timeout: 300) { status.label.hasPrefix("Поверни трохи ліворуч") }
+        XCTAssertFalse(status.label.contains("ворота"), "a new pitch: the app does not know the goals yet: \(status.label)")
+        XCTAssertTrue(app.staticTexts["Лівий кінець поля за краєм кадру"].exists)
+        XCTAssertFalse(app.buttons["goLive"].exists, "no broadcast when the position is not right")
+        allInsideScreen("turn left")
+        shot("81 turn left")
+        let rec = app.buttons["recordOnly"]
+        XCTAssertTrue(rec.exists); rec.tap()
+        wait("recording", timeout: 30) { self.title == "ЗАПИС" }                  // not "LIVE": there is no broadcast
+        XCTAssertTrue(app.staticTexts["status"].label.hasPrefix("Лише запис"), app.staticTexts["status"].label)
+        shot("82 record only")
+        RunLoop.current.run(until: Date().addingTimeInterval(8))
+        wake(); app.descendants(matching: .any)["stop"].press(forDuration: 1.5)
+        let done = app.buttons["resultDone"]
+        if done.waitForExistence(timeout: 15) { shot("83 result"); done.tap() }
+    }
 }

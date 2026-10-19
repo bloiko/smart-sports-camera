@@ -13,6 +13,8 @@ xcrun simctl install "$SIM" "$DD/Build/Products/Debug-iphonesimulator/FolloApp.a
 C=$(xcrun simctl get_app_container "$SIM" com.bohdanloiko.follo data)
 mkdir -p "$C/Documents/testvideo" "$C/Documents/debug"
 [ -f "$C/Documents/testvideo/m2.mp4" ] || cp "${M2:-$HOME/Downloads/132877.mp4}" "$C/Documents/testvideo/m2.mp4"
+# m2 with the left 700 px cut off: the left end of the pitch is out of frame (test10, "turn left" and "record only")
+[ -f "$ROOT/work/ui_videos/m2left.mp4" ] && cp "$ROOT/work/ui_videos/m2left.mp4" "$C/Documents/testvideo/m2left.mp4"
 rm -f "$C/Documents/debug/rtmp_target.txt" "$C/Documents/debug/youtube_key.txt"
 rm -rf "$OUT"; mkdir -p "$OUT"
 # fake Google + YouTube for test3 (Apple's python: the firewall blocks Homebrew's)

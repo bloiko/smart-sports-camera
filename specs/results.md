@@ -756,3 +756,26 @@ next to today's ball model:
   again at 14:15. That launch: position check in 14 s, "left goal may be out of frame", app sent to the background at
   14:15:50, not opened again until 18:41.
 - Fix: the 5 previous logs are kept as log_1…log_5.txt (built, not yet installed on the phone).
+
+## FolloNet-B v3 and v4 (2026-10-18/19): fast passes help the crops, not yet the camera
+
+Crops (held-out last 20%), ball found / false alarms:
+
+| | nobg (current live net) | v3 (fast passes + synthetic balls) | v4 (fast passes only) |
+| --- | --- | --- | --- |
+| m1 | 0.806 / 0.004 | 0.814 / 0.034 | 0.805 / 0.004 |
+| m2 | 0.745 / 0.108 | 0.775 / 0.222 | 0.761 / 0.089 |
+| m3 unseen | 0.495 / 0.036 | 0.425 / 0.180 | **0.522 / 0.040** |
+
+Live simulator (buffer 2 s), ball in crop / pan_mean / checklist (v3 ran with BALL_NET_PRIOR=always, v4 and nobg in
+the normal prior mode):
+
+| | nobg | v3 | v4 |
+| --- | --- | --- | --- |
+| m1 | 0.953 / 84 / 1/1 | 0.944 / 103 / 0/1 | 0.907 / 77 / **0/1** (goal 2:54.8 89% in frame) |
+| m2 | 0.969 / 89 / 3/4 | 0.764 / 81 / 3/4 | 0.943 / 115 / 3/4 (0:13.5 fast pass 0% → 48%) |
+| m3 | 0.833 / 89 / 2/2 | 0.729 / 110 / 2/2 | 0.833 / 102 / **1/2** (chance 1:25.0 69% in frame) |
+
+- Synthetic fast balls (v3) taught the net to fire on small blobs: 2–5× more false alarms, worse on unseen m3. Dropped.
+- v4 is the best net on crops and the first one that moves the m2 fast pass, but it loses two checklist moments in the
+  camera. Not adopted: nobg stays the BALL_NET candidate; YOLO stays the default.

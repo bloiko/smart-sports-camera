@@ -779,3 +779,8 @@ the normal prior mode):
 - Synthetic fast balls (v3) taught the net to fire on small blobs: 2–5× more false alarms, worse on unseen m3. Dropped.
 - v4 is the best net on crops and the first one that moves the m2 fast pass, but it loses two checklist moments in the
   camera. Not adopted: nobg stays the BALL_NET candidate; YOLO stays the default.
+- Frames (2026-10-19): both lost moments are v4 firing on **players' feet** with score 0.5–0.66. m1 2:54.8: the legs of
+  a far player at the touchline (1670, 177) pull the camera 240 px right for 0.3 s exactly at the goal. m3 1:25.0: the
+  current net sees the real ball (1211, 422) going to the left goal; v4 misses it and takes the white socks of a player
+  at the centre circle (1850, 350). Training data: 29% of the m2 fast-pass positives sit at a player's feet (ordinary
+  track points: 16%); m1 10% vs 4%. One run per version, so part of the nobg/v4 difference may be training noise.

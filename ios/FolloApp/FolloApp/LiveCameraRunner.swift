@@ -116,7 +116,8 @@ final class LiveCameraRunner {
     private let pendingLock = NSLock()
     private var pending = 0
     private(set) var skipped = 0
-    private var procMs = 0.0, procMax = 0.0, procN = 0
+    private var procMs = 0.0, procMax = 0.0, procN = 0, emitMs = 0.0
+    private var last = (players: 0.0, ball: 0.0, grey: 0.0)
 
     /// Every captured frame, on the camera queue.
     func push(_ sb: CMSampleBuffer) {
@@ -143,8 +144,12 @@ final class LiveCameraRunner {
         cam.push(rec)
         let ms = (CACurrentMediaTime() - t0) * 1000; procMs += ms; procMax = max(procMax, ms); procN += 1
         if procN == 300 {
-            DebugLog.log(String(format: "pipeline%@: 300 frames, avg %.1f ms, max %.0f ms, skipped for the stream so far %d", Self.syncPipeline ? " (sync)" : "", procMs / 300, procMax, skipped))
-            procMs = 0; procMax = 0; procN = 0
+            // where the time went (per frame, averaged over 300): players and ball models, luma copy, output crop
+            let p = (pipe.timePlayers - last.players) * 1000 / 300, b = (pipe.timeBall - last.ball) * 1000 / 300, g = (pipe.timeGrey - last.grey) * 1000 / 300
+            last = (pipe.timePlayers, pipe.timeBall, pipe.timeGrey)
+            DebugLog.log(String(format: "pipeline%@: 300 frames, avg %.1f ms (players %.1f, ball %.1f incl. luma %.1f, crop %.1f), max %.0f ms, skipped for the stream so far %d",
+                                Self.syncPipeline ? " (sync)" : "", procMs / 300, p, b, g, emitMs / 300, procMax, skipped))
+            procMs = 0; procMax = 0; procN = 0; emitMs = 0
         }
     }
 
@@ -168,7 +173,10 @@ final class LiveCameraRunner {
         overlayLock.lock(); let bug = overlay; overlayLock.unlock()
         if let bug { img = bug.composited(over: img) }                       // табло рахунку в кадрі трансляції
         if outPool == nil { outPool = Self.pool(w: 1920, h: 1080, format: kCVPixelFormatType_32BGRA, count: 6) }
-        if let out = render(img, w: 1920, h: 1080, pool: outPool) {
+        let e0 = CACurrentMediaTime()
+        let rendered = render(img, w: 1920, h: 1080, pool: outPool)
+        emitMs += (CACurrentMediaTime() - e0) * 1000
+        if let out = rendered {
             outFrames += 1; onOutput?(out, t); onPreview?(out, t)
             if outFrames % 250 == 1 { saveDebugFrame(img) }               // debug: кадр трансляції раз на 10 с → Documents/debug/output.jpg
         }
@@ -184,15 +192,7 @@ final class LiveCameraRunner {
     private func copyFrame(_ pb: CVPixelBuffer) -> CVPixelBuffer? {
         let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb), fmt = CVPixelBufferGetPixelFormatType(pb)
         if ringPool == nil { ringPool = Self.pool(w: w, h: h, format: fmt, count: Int(bufferS * fps) + 6) }
-        var out: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, ringPool!, &out)
-        guard let dst = out else { return nil }
-        CVPixelBufferLockBaseAddress(pb, .readOnly); CVPixelBufferLockBaseAddress(dst, [])
-        for p in 0..<max(1, CVPixelBufferGetPlaneCount(pb)) {
-            let rows = CVPixelBufferGetHeightOfPlane(pb, p), bpr = min(CVPixelBufferGetBytesPerRowOfPlane(pb, p), CVPixelBufferGetBytesPerRowOfPlane(dst, p))
-            for y in 0..<rows { memcpy(CVPixelBufferGetBaseAddressOfPlane(dst, p)! + y * CVPixelBufferGetBytesPerRowOfPlane(dst, p), CVPixelBufferGetBaseAddressOfPlane(pb, p)! + y * CVPixelBufferGetBytesPerRowOfPlane(pb, p), bpr) }
-        }
-        CVPixelBufferUnlockBaseAddress(dst, []); CVPixelBufferUnlockBaseAddress(pb, .readOnly)
-        return dst
+        return copyPixelBuffer(pb, pool: ringPool!)                     // FolloCore: one memcpy per plane (follosim bench)
     }
 
     private func render(_ img: CIImage, w: Int, h: Int, pool: CVPixelBufferPool?) -> CVPixelBuffer? {

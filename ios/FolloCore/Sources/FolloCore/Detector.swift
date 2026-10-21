@@ -16,6 +16,8 @@ public final class Detector {
     let rawCtx = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
     var pool: CVPixelBufferPool?
     public var iou = 0.7
+    /// Where a run's time goes (follosim detect prints it): preparing the input (CoreImage crop/scale/render), the model, reading boxes.
+    public private(set) var renderS = 0.0, predictS = 0.0, decodeS = 0.0, runs = 0
 
     /// `url`: a compiled .mlmodelc (Xcode compiles .mlpackage into the app bundle) or an .mlpackage (compiled here).
     public init(url: URL, computeUnits: MLComputeUnits = .all) throws {
@@ -51,12 +53,17 @@ public final class Detector {
         img = img.transformed(by: CGAffineTransform(translationX: dx, y: Double(inH) - nh - dy))
         let bg = CIImage(color: CIColor(red: 114 / 255, green: 114 / 255, blue: 114 / 255)).cropped(to: CGRect(x: 0, y: 0, width: inW, height: inH))
         img = img.composited(over: bg)
+        let t0 = CFAbsoluteTimeGetCurrent(); runs += 1
         var pb: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool!, &pb)
         guard let out = pb else { return [] }
         if cvLike { rawCtx.render(img, to: out, bounds: CGRect(x: 0, y: 0, width: inW, height: inH), colorSpace: nil) }
         else { ctx.render(img, to: out, bounds: CGRect(x: 0, y: 0, width: inW, height: inH), colorSpace: CGColorSpaceCreateDeviceRGB()) }
+        let t1 = CFAbsoluteTimeGetCurrent(); renderS += t1 - t0
         let input = try! MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: out), "iouThreshold": MLFeatureValue(double: iou), "confidenceThreshold": MLFeatureValue(double: conf)])
-        guard let res = try? model.prediction(from: input), let confs = res.featureValue(for: "confidence")?.multiArrayValue, let coords = res.featureValue(for: "coordinates")?.multiArrayValue else { return [] }
+        let res = try? model.prediction(from: input)
+        let t2 = CFAbsoluteTimeGetCurrent(); predictS += t2 - t1
+        defer { decodeS += CFAbsoluteTimeGetCurrent() - t2 }
+        guard let res, let confs = res.featureValue(for: "confidence")?.multiArrayValue, let coords = res.featureValue(for: "coordinates")?.multiArrayValue else { return [] }
         let n = confs.shape[0].intValue, nc = confs.shape[1].intValue; var dets: [Det] = []
         for i in 0..<n {
             var best = 0, bc = 0.0

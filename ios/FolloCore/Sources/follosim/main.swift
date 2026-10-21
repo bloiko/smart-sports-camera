@@ -475,7 +475,65 @@ case "env", "detect":
     try! lines.joined(separator: "\n").appending("\n").write(toFile: dir + "/swift_det.jsonl", atomically: true, encoding: .utf8)
     let n = Double(f)
     print("detection: \(Int(Date().timeIntervalSince(t1))) s for \(f) frames; players pass \(Int(pipe.timePlayers / (n / Double(pipe.playerEvery)) * 1000)) ms every \(pipe.playerEvery) frames, ball ROI \(Int(pipe.timeBall / Double(max(pipe.ballCalls, 1)) * 1000)) ms × \((Double(pipe.ballCalls) / (n / Double(pipe.ballEvery))).formatted(.number.precision(.fractionLength(2)))) per pass every \(pipe.ballEvery) frames (Core ML on this Mac)")
+    for (name, d) in [("players", pl), ("ball", bd)] {
+        let k = 1000 / Double(max(d.runs, 1))
+        print(String(format: "  %@ model, per run: input %.1f ms, model %.1f ms, boxes %.1f ms (%d runs)", name, d.renderS * k, d.predictS * k, d.decodeS * k, d.runs))
+    }
+    print(String(format: "  full-frame grey copies: %.1f ms each, on %.0f%% of frames", pipe.timeGrey * 1000 / Double(max(pipe.greyCalls, 1)), Double(pipe.greyCalls) / n * 100))
     print("live ball found on \((Double(found) / Double(max(passes, 1)) * 100).formatted(.number.precision(.fractionLength(1))))% of ball passes → \(dir)/swift_det.jsonl")
+case "bench":   // follosim bench VIDEO [--frames N] — the phone's per-frame work outside the models, on camera-format (4:2:0) frames, old vs new
+    guard args.count >= 3 else { die("usage: follosim bench VIDEO [--frames N]") }
+    let reader = try! VideoReader(path: args[2]); reader.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange; try! reader.start()
+    let limit = args.firstIndex(of: "--frames").map { Int(args[$0 + 1])! } ?? 200
+    var pool: CVPixelBufferPool?, outPool: CVPixelBufferPool?
+    let ctx = CIContext(options: [.cacheIntermediates: false])
+    var tGreyOld = 0.0, tGreyNew = 0.0, tCopyOld = 0.0, tCopyNew = 0.0, tEmit = 0.0, n = 0
+    func ms(_ b: () -> Void) -> Double { let t = CFAbsoluteTimeGetCurrent(); b(); return (CFAbsoluteTimeGetCurrent() - t) * 1000 }
+    while n < limit {
+        let ok: Bool = autoreleasepool {
+            guard let pb = reader.next() else { return false }
+            let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb), fmt = CVPixelBufferGetPixelFormatType(pb)
+            if pool == nil {
+                let a: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: fmt, kCVPixelBufferWidthKey as String: w, kCVPixelBufferHeightKey as String: h, kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
+                CVPixelBufferPoolCreate(nil, [kCVPixelBufferPoolMinimumBufferCountKey as String: 8] as CFDictionary, a as CFDictionary, &pool)
+                let o: [String: Any] = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 1920, kCVPixelBufferHeightKey as String: 1080, kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
+                CVPixelBufferPoolCreate(nil, nil, o as CFDictionary, &outPool)
+            }
+            // old luma copy: per-row closure into a zero-filled array (as before 2026-10-22)
+            tGreyOld += ms {
+                CVPixelBufferLockBaseAddress(pb, .readOnly); defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+                let w0 = CVPixelBufferGetWidthOfPlane(pb, 0), h0 = CVPixelBufferGetHeightOfPlane(pb, 0), bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+                let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0)!.assumingMemoryBound(to: UInt8.self)
+                var d = [UInt8](repeating: 0, count: w0 * h0)
+                for y in 0..<h0 { d.withUnsafeMutableBufferPointer { $0.baseAddress!.advanced(by: y * w0).update(from: base + y * bpr, count: w0) } }
+                _ = Image8(w: w0, h: h0, ch: 1, data: d)
+            }
+            tGreyNew += ms { _ = Image8.grey(from: pb) }
+            // old frame copy: LiveCameraRunner.copyFrame before 2026-10-22 (base addresses per row)
+            tCopyOld += ms {
+                var out: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, pool!, &out); let dst = out!
+                CVPixelBufferLockBaseAddress(pb, .readOnly); CVPixelBufferLockBaseAddress(dst, [])
+                for p in 0..<max(1, CVPixelBufferGetPlaneCount(pb)) {
+                    let rows = CVPixelBufferGetHeightOfPlane(pb, p), bpr = min(CVPixelBufferGetBytesPerRowOfPlane(pb, p), CVPixelBufferGetBytesPerRowOfPlane(dst, p))
+                    for y in 0..<rows { memcpy(CVPixelBufferGetBaseAddressOfPlane(dst, p)! + y * CVPixelBufferGetBytesPerRowOfPlane(dst, p), CVPixelBufferGetBaseAddressOfPlane(pb, p)! + y * CVPixelBufferGetBytesPerRowOfPlane(pb, p), bpr) }
+                }
+                CVPixelBufferUnlockBaseAddress(dst, []); CVPixelBufferUnlockBaseAddress(pb, .readOnly)
+            }
+            var copy: CVPixelBuffer?
+            tCopyNew += ms { copy = copyPixelBuffer(pb, pool: pool!) }
+            // the output crop: 1500×844 around the centre → 1920×1080 BGRA (LiveCameraRunner.emit)
+            tEmit += ms {
+                let cw = 1500.0, ch = 844.0, rect = CGRect(x: Double(w) / 2 - cw / 2, y: Double(h) / 2 - ch / 2, width: cw, height: ch)
+                let img = CIImage(cvPixelBuffer: copy!).cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY)).transformed(by: CGAffineTransform(scaleX: 1920 / cw, y: 1080 / ch))
+                var o: CVPixelBuffer?; CVPixelBufferPoolCreatePixelBuffer(nil, outPool!, &o)
+                ctx.render(img, to: o!, bounds: CGRect(x: 0, y: 0, width: 1920, height: 1080), colorSpace: CGColorSpaceCreateDeviceRGB())
+            }
+            n += 1; return true
+        }
+        if !ok { break }
+    }
+    let k = 1.0 / Double(max(n, 1))
+    print(String(format: "%d frames %@ (4:2:0), per frame on this Mac:\n  luma copy   old %.1f ms → new %.1f ms\n  frame copy  old %.1f ms → new %.1f ms\n  output crop %.1f ms (CoreImage render 1920×1080)", n, "\(reader.W)×\(reader.H)", tGreyOld * k, tGreyNew * k, tCopyOld * k, tCopyNew * k, tEmit * k))
 case "highlights":
     guard args.count >= 4 else { die("usage: follosim highlights DIR VIDEO [--swift] [--no-render]") }
     let dir = args[2], video = args[3], swift = args.contains("--swift"); let prefix = swift ? "swift_" : ""

@@ -849,3 +849,24 @@ injury stoppage; real play only from ~1:06.
 - Not verified yet, needs the phone: the horizon line and "Телефон рівно" (no motion sensors in the simulator; the sign
   of the tilt is derived from the sensor orientation, check that the line is level when the phone is), and the automatic
   re-check after turning the phone.
+
+## Frame processing cost, measured on the M1 Mac (2026-10-22)
+
+`follosim detect … --frames 600` on the owner's 4K phone file now prints a breakdown; `follosim bench VIDEO` times the
+rest of the phone's frame path on camera-format (4:2:0) frames.
+
+| Step | Cost on the M1 | How often | Average per frame |
+| --- | --- | --- | --- |
+| Players model, 2 tiles (input 1.8 + model 15.1 + boxes 0.9 ms each) | ~38 ms | every 4th frame | ~9.5 ms |
+| Ball model per ROI (input 1.9 + model 3.1 ms), 1.36 ROIs | ~7 ms | every 2nd frame | ~3.5 ms |
+| Luma copy for the background check (4:2:0) | 0.5 → 0.3 ms | 40% of frames | ~0.1 ms |
+| Ring copy of the 4K frame | 0.7 → 0.3 ms | every frame | 0.3 ms |
+| Output crop 1920×1080 (CoreImage) | 2.2 ms | every frame | 2.2 ms |
+
+- The average (~15 ms) fits in 33 ms; the problem on 18.10 was the peak: a players frame takes ~40 ms, longer than one
+  camera frame, and on the camera queue that made iOS drop the next frame (~5 drops/s ≈ the players passes). The
+  pipeline queue from 2026-10-19 (2 frames of slack) absorbs that peak, so in theory both file and stream get 30 fps.
+- The 24 ms "grey copy" in `follosim detect` is the Mac's BGRA file path, not the camera's 4:2:0 path.
+- Copies made faster (shared `copyPixelBuffer`, one memcpy per plane); detections identical (600 frames compared).
+- The app log now splits the `pipeline:` line into players / ball / luma / crop ms, so the next phone run gives the real
+  numbers. Device build blocked on 2026-10-22: Xcode has no Apple account signed in ("No Accounts").

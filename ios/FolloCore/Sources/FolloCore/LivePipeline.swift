@@ -13,6 +13,7 @@ public final class LivePipeline {
     public var playerConf = 0.12, ballConf = 0.1, bgMin = 15.0
     let fm: Mask
     public var timePlayers = 0.0, timeBall = 0.0, ballCalls = 0
+    public var timeGrey = 0.0, greyCalls = 0          // full-frame luma copies (background check)
     public var fmd: Mask { tracker.fmd }
     /// Jersey colours sampled on every 2nd player frame (for the kick-off search after Stop).
     public private(set) var jerseys: [JerseySample] = []
@@ -48,7 +49,7 @@ public final class LivePipeline {
     /// `grey`: full-size grey image of the frame (Y plane on the phone), only read when needed.
     public func process(frame f: Int, image: CIImage, grey: () -> Image8, patch: ((Int, Int, Int, Int) -> Image8)? = nil) -> FrameRecord {
         var rec = FrameRecord(frame: f); var g: Image8? = nil
-        func greyImg() -> Image8 { if g == nil { g = grey() }; return g! }
+        func greyImg() -> Image8 { if g == nil { let t = CFAbsoluteTimeGetCurrent(); g = grey(); timeGrey += CFAbsoluteTimeGetCurrent() - t; greyCalls += 1 }; return g! }
         if Double(f) / fps - bg.lastT >= bg.everyS { bg.push(grey: greyImg(), time: Double(f) / fps) }
         if f % playerEvery == 0 {
             let t = Date(); var ps: [Box] = []; var hints: [Pt] = []

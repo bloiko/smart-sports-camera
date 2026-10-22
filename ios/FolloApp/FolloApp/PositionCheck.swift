@@ -57,7 +57,8 @@ struct PositionCheck {
 
     static let levelDeg = 1.5         // до стількох градусів — «рівно»
 
-    static func make(runner: LiveCameraRunner, halfPitch: Bool, tilt: TiltMonitor, lowLight: String?) -> PositionCheck {
+    /// `extra`: готовність телефона до матчу (місце, батарея, нагрів, команди) — додається в кінець чекліста, ефір не блокує.
+    static func make(runner: LiveCameraRunner, halfPitch: Bool, tilt: TiltMonitor, lowLight: String?, extra: [Row] = []) -> PositionCheck {
         var rows: [Row] = []
         let tiltRow: Row? = {
             if tilt.portrait { return Row(ok: false, text: "Поверни телефон горизонтально", icon: "rectangle.landscape.rotate") }
@@ -69,7 +70,7 @@ struct PositionCheck {
             let left = max(0, Int(Double(7 - runner.prerollCount) * 1.4 + 4))
             rows = [Row(ok: nil, text: "Поле"), Row(ok: nil, text: "Кінці поля")]
             if let t = tiltRow { rows.append(t) }
-            rows.append(lightRow)
+            rows.append(lightRow); rows += extra
             let d = tilt.moving ? "Телефон рухається: тримай його нерухомо"
                 : runner.building ? "Рахую поле…" : "Тримай телефон нерухомо ще \(left) с"
             return PositionCheck(verdict: .checking, title: "Дивлюсь на поле", detail: d, rows: rows)
@@ -92,7 +93,7 @@ struct PositionCheck {
             if p?.contains("too small") == true { rows.append(Row(ok: false, text: "Поле замале в кадрі", icon: "arrow.up.left.and.arrow.down.right")) }
         }
         if let t = tiltRow { rows.append(t) }
-        rows.append(lightRow)
+        rows.append(lightRow); rows += extra
 
         let okForMode = p == nil || (halfPitch && p!.contains("goal"))
         if okForMode {

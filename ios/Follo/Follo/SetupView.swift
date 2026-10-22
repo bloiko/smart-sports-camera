@@ -98,7 +98,8 @@ struct SetupView: View {
     static let oldPositionUI = CommandLine.arguments.contains("--old-position-ui")
     @StateObject var tilt = TiltMonitor()
     @State var checkTick = 0                                          // щосекунди: перемалювати висновок перевірки
-    @State var recordOnly = false                                     // «Тільки запис, без ефіру»
+    @State var recordOnly = false
+    @State var showTest = false                                       // блок «Для тестів» розгорнутий                                     // «Тільки запис, без ефіру»
     // таймер один на весь екран: Timer.publish у body перестворювався з кожним кадром прев'ю і не встигав спрацювати
     @State private var ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @Environment(\.scenePhase) var scenePhase                                       // пункт 10
@@ -236,16 +237,19 @@ struct SetupView: View {
     }
 
     @ViewBuilder var controls: some View {
+        if cam.isRecording || Self.oldPositionUI {                       // до старту там лише прочерки: стан телефона — у чеклісті
         HStack {
             stat(cam.isRecording ? "\(cam.chunkCount)" : "—", "файлів 4K")
             stat(thermalText, "телефон")
             stat(startedAt.map { fmt(Date().timeIntervalSince($0)) } ?? "—", recordOnly && cam.isRecording ? "запис" : "у ефірі")
             stat(startedAt != nil ? "\(Int(ls.runner.ballShare * 100))%" : "—", "м'яч")
         }
+        }
         if cam.isRecording { ScoreBar(score: score); breakRow }
         else {
             Button { showTeams = true } label: {
-                HStack { Text("Команди"); Spacer(); Text("\(score.state.home.name) – \(score.state.away.name)").foregroundStyle(.secondary).lineLimit(1) }
+                HStack { Text("Команди"); Spacer()
+                    Text(teamsDefault ? "Задай назви" : "\(score.state.home.name) – \(score.state.away.name)").foregroundStyle(teamsDefault ? Color.yellow : .secondary).lineLimit(1) }
             }.font(.footnote).padding(10).background(.white.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 10))
         }
         if !cam.isRecording, yt.auth != nil { youTubeRow }
@@ -263,19 +267,7 @@ struct SetupView: View {
                 Text(n).accessibilityIdentifier("statusNote").font(.footnote).foregroundStyle(error != nil || cam.cameraError != nil ? Color.yellow : Color.secondary).multilineTextAlignment(.center)
             }
         }
-        if !cam.isRecording, !CameraSession.testVideos.isEmpty {      // лише debug: тестове відео замість камери
-            Picker("Джерело", selection: Binding(get: { cam.testVideo }, set: { cam.setSource($0); ls.runner.resetPosition() })) {
-                Text("Камера").tag(URL?.none)
-                ForEach(CameraSession.testVideos, id: \.self) { Text("Відео \($0.deletingPathExtension().lastPathComponent)").tag(URL?.some($0)) }
-            }.pickerStyle(.segmented)
-        }
-        #if DEBUG
-        if !cam.isRecording {                                             // debug: which stream path (rollback switch, stage 1f)
-            Picker("Стрім", selection: Binding(get: { Streamer.engine.rawValue }, set: { UserDefaults.standard.set($0, forKey: "debug.streamer") })) {
-                Text("Стрім: HaishinKit").tag("haishinkit"); Text("Стрім: Follo").tag("follo")
-            }.pickerStyle(.segmented)
-        }
-        #endif
+        if !cam.isRecording { testControls }
         #if DEBUG
         if cam.isRecording { Text("reconnects \(ls.streamer.reconnects)").font(.caption2).foregroundStyle(.tertiary).accessibilityIdentifier("reconnects") }
         #endif
@@ -287,7 +279,7 @@ struct SetupView: View {
             HStack { Text("Ефір відстає на \(Int(ls.streamer.delayS)) с").font(.footnote); Spacer(); Button("Наздогнати ефір") { ls.streamer.catchUp() }.font(.footnote) }
                 .padding(8).background(Color.yellow.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 8))
         }
-        if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
+        if cam.isRecording, !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
         if let l = cam.lowLight { Text(l).font(.caption2).foregroundStyle(Color.yellow).multilineTextAlignment(.center) }
         if !cam.isRecording {
             // звичайна кнопка: ні сегментний Picker, ні Toggle тут не перемикались (UI-тест 9, 2026-10-18)
@@ -349,7 +341,58 @@ struct SetupView: View {
         return halfPitch && p.contains("goal")                       // пів поля: лише «ворота біля краю» не заважає
     }
     /// Висновок перевірки позиції для нового вигляду (checkTick перемальовує його щосекунди).
-    var positionCheck: PositionCheck { _ = checkTick; return PositionCheck.make(runner: ls.runner, halfPitch: halfPitch, tilt: tilt, lowLight: cam.lowLight) }
+    var positionCheck: PositionCheck { _ = checkTick; return PositionCheck.make(runner: ls.runner, halfPitch: halfPitch, tilt: tilt, lowLight: cam.lowLight, extra: readinessRows) }
+
+    /// Чи витримає телефон матч (2026-10-23): місце на запис, батарея, нагрів, назви команд. Попередження, а не заборона.
+    var readinessRows: [PositionCheck.Row] {
+        typealias Row = PositionCheck.Row
+        var r: [Row] = []
+        // 4K HEVC 30 Мбіт/с ≈ 3,6 МБ/с (файл 18.10: 351 МБ за 97 с); матч з перервою ≈ 110 хв
+        if let v = try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let free = v.volumeAvailableCapacityForImportantUsage {
+            let min = Int(Double(free) / 3.6e6 / 60)
+            let t = min >= 120 ? "\(min / 60) год \(min % 60) хв" : "\(min) хв"
+            r.append(min >= 110 ? Row(ok: true, text: "Місця на ~\(t) запису") : Row(ok: false, text: "Місця лише на ~\(t) запису 4K: звільни пам'ять", icon: "internaldrive"))
+        }
+        let lvl = UIDevice.current.batteryLevel, st = UIDevice.current.batteryState
+        if lvl >= 0 {                                                   // −1 у симуляторі: рядка немає
+            let p = Int(lvl * 100)
+            if st == .charging || st == .full { r.append(Row(ok: true, text: "Батарея \(p)%, заряджається")) }
+            else if p >= 80 { r.append(Row(ok: true, text: "Батарея \(p)%")) }
+            else { r.append(Row(ok: false, text: "Батарея \(p)% без павербанка: на весь матч може не вистачити", icon: "battery.25")) }
+        }
+        r.append(thermal.rawValue >= 2 ? Row(ok: false, text: "Телефон гарячий: постав у тінь", icon: "thermometer.sun") : Row(ok: true, text: "Телефон не гарячий"))
+        if teamsDefault { r.append(Row(ok: false, text: "Назви команд не задані: на табло буде «Home – Away»", icon: "person.2")) }
+        return r
+    }
+    var teamsDefault: Bool { let h = score.state.home.name, a = score.state.away.name; return (h == "Home" && a == "Away") || h.isEmpty || a.isEmpty }
+
+    /// Перемикачі для тестів (джерело кадрів, стрімер, формат) — згорнуті, щоб не захаращувати екран перед матчем.
+    @ViewBuilder var testControls: some View {
+        let sourcePicker = Picker("Джерело", selection: Binding(get: { cam.testVideo }, set: { cam.setSource($0); ls.runner.resetPosition() })) {
+            Text("Камера").tag(URL?.none)
+            ForEach(CameraSession.testVideos, id: \.self) { Text("Відео \($0.deletingPathExtension().lastPathComponent)").tag(URL?.some($0)) }
+        }.pickerStyle(.segmented)
+        // тестове відео замість камери — видно завжди (19.10 телефон «перевіряв поле» на відео m2, а не з камери)
+        if let v = cam.testVideo {
+            Label("Джерело: тестове відео \(v.deletingPathExtension().lastPathComponent), не камера", systemImage: "film")
+                .font(.footnote).foregroundStyle(.yellow).accessibilityIdentifier("testSource")
+        }
+        #if DEBUG
+        DisclosureGroup(isExpanded: $showTest) {
+            VStack(spacing: 8) {
+                if !CameraSession.testVideos.isEmpty { sourcePicker }
+                Picker("Стрім", selection: Binding(get: { Streamer.engine.rawValue }, set: { UserDefaults.standard.set($0, forKey: "debug.streamer") })) {
+                    Text("Стрім: HaishinKit").tag("haishinkit"); Text("Стрім: Follo").tag("follo")         // rollback switch, stage 1f
+                }.pickerStyle(.segmented)
+                if !cam.formatInfo.isEmpty { Text(cam.formatInfo).font(.caption2).foregroundStyle(.secondary) }
+            }.padding(.top, 6)
+        } label: { Text("Для тестів").font(.footnote).foregroundStyle(.secondary) }
+            .accessibilityIdentifier("testControls")
+        #else
+        if !CameraSession.testVideos.isEmpty { sourcePicker }
+        #endif
+    }
     /// Тест: тестове відео замість камери або запуск з Mac. Правило власника: у тестах звук ефіру завжди вимкнений.
     var isTest: Bool { cam.testVideo != nil || CommandLine.arguments.contains("--autostart") }
 

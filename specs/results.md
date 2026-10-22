@@ -870,3 +870,8 @@ rest of the phone's frame path on camera-format (4:2:0) frames.
 - Copies made faster (shared `copyPixelBuffer`, one memcpy per plane); detections identical (600 frames compared).
 - The app log now splits the `pipeline:` line into players / ball / luma / crop ms, so the next phone run gives the real
   numbers. Device build blocked on 2026-10-22: Xcode has no Apple account signed in ("No Accounts").
+
+## Setup screen readiness rows (2026-10-23)
+
+- Simulator UI tests 1, 6, 9, 10 pass (test 1 now finds the always-visible "testSource" note instead of the format line).
+- Battery rows do not show in the simulator (battery level −1); check them on the phone.

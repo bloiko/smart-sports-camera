@@ -45,7 +45,8 @@ final class FolloUITests: XCTestCase {
         let go = app.buttons["goLive"]
         XCTAssertTrue(go.waitForExistence(timeout: 10))
         // the simulator has no camera: without the test video the position check would wait forever
-        let source = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Тестове відео'")).firstMatch
+        // the yellow "test video, not the camera" note (always visible; the format line moved into "Для тестів", 2026-10-23)
+        let source = app.descendants(matching: .any)["testSource"]
         XCTAssertTrue(source.waitForExistence(timeout: 15), "no test video in the app: run through ios/ui_test.sh")
         XCTAssertEqual(title, "Готово до гри")
         if !go.isEnabled {                                                   // position check still running: grey, no action

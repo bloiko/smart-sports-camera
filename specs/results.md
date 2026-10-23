@@ -886,3 +886,18 @@ checklist shifted by −500 px.
 - Camera: checklist **2/4** (0:13.5 right attack 0%, 1:02.3 40%) against 4/4 on the full frame with the same code
   (`work/m2/live_yolo_now`). Frames: during both right-side attacks the camera stays wide around the halfway line
   (X ≈ 2300–2650 in full-frame pixels) while play is at the right goal (≈ 3000). Cause not found yet.
+
+## Far touchline: tried for both near-corner problems, kept OFF (2026-10-23)
+
+`far_line` in `src/fieldmask.py` / `FarLine.swift`: white pixels with grass 4 px above and below in the upper 45% of
+the pitch, a (b, c) grid with a 1 px histogram for y0 (deterministic; Swift finds the same y0, b, c, xl, xr as Python on
+m2 and m2near; masks agree 99.1–99.5% as before). Found on m2 and m2near, not on m1, m3 or the owner's phone file.
+- Cutting the mask above the line removes the false "ball" on the neighbouring pitch, but changes the ball search both
+  ways: m2near 0:13.5 0% → 44% (1:02.3 still 40%: the camera then holds a still spare ball by the bench, y ≈ 770);
+  full m2 0:13.5 100% → 48% (checklist 4/4 → 3/4). Not adopted.
+- Position check by the ends of the line: m2near "ok" (right), but also "ok" on the test10 video where the left goal is
+  cut off 63 px from the edge: the line ends at the far corners and the goals stand further out. Unsafe, not adopted.
+- Both stay behind switches (`FIELD_LINE=1`, `FIELD_LINE_CUT=1`, app `--field-line`, `--field-line-cut`); default
+  behaviour is unchanged (m2 mask identical, verdicts identical, UI tests 1 and 10 pass).
+- What the camera really needs (next): the ball tracker must drop balls that stay still while play moves (spare balls)
+  and balls far outside play; the position check needs the goals themselves, not the ends of the grass or of the line.

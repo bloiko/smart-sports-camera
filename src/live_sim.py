@@ -205,7 +205,7 @@ def live_env(video):
     content = med.max(axis=2) > 12
     top = np.array([np.argmax(c) if c.any() else 0 for c in content.T]); bot = np.array([H - np.argmax(c[::-1]) if c.any() else H for c in content.T])
     cline = centre_line(fm, med)[0] if CAM['mirror'] else None
-    return dict(W=W, H=H, fps=fps, fm=fm, fmd=fmd, med=med, top=top, bot=bot, cline=cline)
+    return dict(W=W, H=H, fps=fps, fm=fm, fmd=fmd, med=med, top=top, bot=bot, cline=cline, far_line=field_mask.line)
 
 
 def dump_env(env, out):
@@ -213,7 +213,7 @@ def dump_env(env, out):
     cl = env['cline']; H = env['H']
     x0, x1 = (float(cl(0)), float(cl(H))) if cl else (float('nan'), float('nan'))
     json.dump(dict(W=env['W'], H=env['H'], fps=env['fps'], top=env['top'].tolist(), bot=env['bot'].tolist(),
-                   cline=dict(x0=x0, x1=x1), preroll_s=PREROLL_S), open(os.path.join(out, 'env.json'), 'w'))
+                   cline=dict(x0=x0, x1=x1), preroll_s=PREROLL_S, far_line=env.get('far_line')), open(os.path.join(out, 'env.json'), 'w'))
     cv2.imwrite(os.path.join(out, 'fm.png'), env['fm'] * 255); cv2.imwrite(os.path.join(out, 'fmd.png'), env['fmd'] * 255)
     cv2.imwrite(os.path.join(out, 'med.png'), env['med'])
 

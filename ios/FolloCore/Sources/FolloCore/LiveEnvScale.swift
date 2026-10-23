@@ -23,7 +23,7 @@ extension LiveEnv {
         var e = LiveEnv(W: W * k, H: H * k, fps: fps, fmd: fmd.scaled(k),
                         top: (0..<(W * k)).map { top[$0 / k] * kk }, bot: (0..<(W * k)).map { bot[$0 / k] * kk },
                         centre: c.map { f in { y in f(y / kk) * kk } })
-        e.fm = fm?.scaled(k); e.centreEnds = centreEnds.map { ($0.0 * kk, $0.1 * kk) }
+        e.fm = fm?.scaled(k); e.centreEnds = centreEnds.map { ($0.0 * kk, $0.1 * kk) }; e.farLine = farLine?.scaled(k)
         return e
     }
 
@@ -35,7 +35,9 @@ extension LiveEnv {
         _ = b
         // Goals stand at the far corners. Near the camera the grass legitimately reaches the frame sides (wide lens,
         // panoramas m1/m2), so only the far quarter of the pitch must keep a margin from the left/right edges.
-        guard let (l, r) = fm.farBand else { return "No pitch found: point the camera at the field" }
+        // the ends of the far touchline are the ends of the pitch (green behind the goals does not count)
+        let ends: (Double, Double)? = (FarLine.enabled ? farLine : nil).map { (Double($0.xl), Double($0.xr)) } ?? fm.farBand
+        guard let (l, r) = ends else { return "No pitch found: point the camera at the field" }
         let m = Double(fm.w) / 33
         if l < m { return "The left goal may be out of frame: turn the phone left" }
         if r > Double(fm.w - 1) - m { return "The right goal may be out of frame: turn the phone right" }
@@ -77,7 +79,11 @@ public struct PositionOverlay: Sendable {
 
 extension LiveEnv {
     public func positionOverlay(maxWidth: Int = 320) -> PositionOverlay? {
-        guard let fm = fm, let band = fm.farBandRows else { return nil }
+        guard let fm = fm, var band = fm.farBandRows else { return nil }
+        if FarLine.enabled, let L = farLine {                        // markers at the ends of the far touchline
+            let yl = L.y(Double(L.xl), W: fm.w), yr = L.y(Double(L.xr), W: fm.w)
+            band = (Double(L.xl), Double(L.xr), Int(min(yl, yr)) - 10, Int(max(yl, yr)) + 10)
+        }
         let k = max(1, Int((Double(fm.w) / Double(maxWidth)).rounded(.up)))
         let mw = fm.w / k, mh = fm.h / k
         var small = [UInt8](repeating: 0, count: mw * mh)

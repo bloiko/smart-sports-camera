@@ -4,7 +4,16 @@ import Foundation
 /// Fixed green range first (bright artificial grass); if the field comes out too small (pale grass, evening),
 /// the adaptive mode takes the grass colour from points along the lower half of the frame.
 public enum FieldMask {
-    public static func make(median med: Image8) -> Mask {
+    public static func make(median med: Image8) -> Mask { makeWithLine(median: med).mask }
+
+    /// The mask cut above the far touchline when one is found (FarLine.swift), and the line.
+    public static func makeWithLine(median med: Image8) -> (mask: Mask, line: FarLine?) {
+        let m = grassMask(median: med)
+        guard FarLine.enabled, let L = FarLine.find(median: med, mask: m) else { return (m, nil) }
+        return (FarLine.cutEnabled ? L.cut(m) : m, L)
+    }
+
+    static func grassMask(median med: Image8) -> Mask {
         let w = med.w, h = med.h; var g = [UInt8](repeating: 0, count: w * h)
         for i in 0..<(w * h) {
             let (hh, s, v) = Image8.hsv(b: med.data[i * 3], g: med.data[i * 3 + 1], r: med.data[i * 3 + 2])

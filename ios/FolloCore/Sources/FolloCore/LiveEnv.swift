@@ -12,6 +12,7 @@ public struct LiveEnv {
     public var centre: ((Double) -> Double)?
     public var fm: Mask? = nil                 // undilated mask (ball filter in the tracker)
     public var centreEnds: (Double, Double)? = nil
+    public var farLine: FarLine? = nil          // far touchline: mask cut above it, its ends = ends of the pitch
 
     public static let prerollS = 10.0
 
@@ -25,16 +26,16 @@ public struct LiveEnv {
     }
 
     public static func make(frames: [Image8], fps: Double) -> LiveEnv {
-        let med = Image8.median(frames); let fm = FieldMask.make(median: med); let (top, bot) = FieldMask.contentBounds(med)
+        let med = Image8.median(frames); let (fm, line) = FieldMask.makeWithLine(median: med); let (top, bot) = FieldMask.contentBounds(med)
         let cl = CentreLine.find(mask: fm, median: med)
         var e = LiveEnv(W: med.w, H: med.h, fps: fps, fmd: fm.dilated(41), top: top, bot: bot, centre: cl)
-        e.fm = fm; if let c = cl { e.centreEnds = (c(0), c(Double(med.h))) }
+        e.fm = fm; e.farLine = line; if let c = cl { e.centreEnds = (c(0), c(Double(med.h))) }
         return e
     }
 
     public func save(dir: String, prefix: String) throws {
         let o: [String: Any] = ["W": W, "H": H, "fps": fps, "top": top, "bot": bot, "preroll_s": Self.prerollS,
-                                "cline": ["x0": centreEnds?.0 ?? Double.nan, "x1": centreEnds?.1 ?? Double.nan]]
+                                "cline": ["x0": centreEnds?.0 ?? Double.nan, "x1": centreEnds?.1 ?? Double.nan], "far_line": farLine?.json ?? NSNull()]
         try JSONSerialization.data(withJSONObject: o).write(to: URL(fileURLWithPath: dir + "/\(prefix)env.json"))
         try fmd.savePNG(dir + "/\(prefix)fmd.png"); try fm?.savePNG(dir + "/\(prefix)fm.png")
     }
@@ -46,7 +47,7 @@ public struct LiveEnv {
         let cl = o["cline"] as! [String: Any]; let x0 = cl["x0"] as! Double, x1 = cl["x1"] as! Double
         let centre: ((Double) -> Double)? = x0.isNaN ? nil : { y in x0 + (x1 - x0) * y / Double(H) }
         var e = LiveEnv(W: W, H: H, fps: fps, fmd: try Mask.loadPNG(dir + "/\(prefix)fmd.png"), top: o["top"] as! [Double], bot: o["bot"] as! [Double], centre: centre)
-        e.fm = try? Mask.loadPNG(dir + "/\(prefix)fm.png"); return e
+        e.fm = try? Mask.loadPNG(dir + "/\(prefix)fm.png"); e.farLine = FarLine(json: o["far_line"]); return e
     }
 }
 

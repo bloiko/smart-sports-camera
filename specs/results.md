@@ -875,3 +875,14 @@ rest of the phone's frame path on camera-format (4:2:0) frames.
 
 - Simulator UI tests 1, 6, 9, 10 pass (test 1 now finds the always-visible "testSource" note instead of the format line).
 - Battery rows do not show in the simulator (battery level −1); check them on the phone.
+
+## Near corners out of frame (owner's question, 2026-10-23)
+
+Test: m2 cropped to x 500..3600 (`work/m2near/`, near corners out, far corners and both goals in), YOLO, current code,
+checklist shifted by −500 px.
+- Position check: **"The left goal may be out of frame"**: the green run-off behind the goals now reaches the frame
+  edges in the far quarter of the mask, so the check blocks GO LIVE although both goals are in frame (false alarm;
+  only "Тільки запис" would be offered).
+- Camera: checklist **2/4** (0:13.5 right attack 0%, 1:02.3 40%) against 4/4 on the full frame with the same code
+  (`work/m2/live_yolo_now`). Frames: during both right-side attacks the camera stays wide around the halfway line
+  (X ≈ 2300–2650 in full-frame pixels) while play is at the right goal (≈ 3000). Cause not found yet.

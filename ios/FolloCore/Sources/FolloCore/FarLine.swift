@@ -11,9 +11,9 @@ public struct FarLine: Equatable {
 
     /// OFF by default (2026-10-23), experiments only (results.md): the ends of the line are the far corners, and the
     /// goals stand further out, so "line ends in frame" passed a frame with the left goal cut off (test10 video).
-    public static var enabled = ProcessInfo.processInfo.environment["FIELD_LINE"] == "1" || CommandLine.arguments.contains("--field-line")
+    public static let enabled = ProcessInfo.processInfo.environment["FIELD_LINE"] == "1" || CommandLine.arguments.contains("--field-line")
     /// Also cut the mask above the line: on m2 it changed the ball search both ways (0:13.5 full frame 100% → 48%).
-    public static var cutEnabled = enabled && (ProcessInfo.processInfo.environment["FIELD_LINE_CUT"] == "1" || CommandLine.arguments.contains("--field-line-cut"))
+    public static let cutEnabled = enabled && (ProcessInfo.processInfo.environment["FIELD_LINE_CUT"] == "1" || CommandLine.arguments.contains("--field-line-cut"))
     static let bs: [Double] = stride(from: -300, through: 300, by: 10).map(Double.init)
     static let cs: [Double] = stride(from: -200, through: 2000, by: 20).map(Double.init)
     static let margin = 0.04
